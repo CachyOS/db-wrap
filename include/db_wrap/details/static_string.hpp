@@ -1,3 +1,8 @@
+/*
+ * SPDX-License-Identifier: MIT
+ *
+ * Copyright (c) 2024 Vladislav Nepogodin <vnepogodin@cachyos.org>
+ */
 #pragma once
 
 #include <cstdint>
