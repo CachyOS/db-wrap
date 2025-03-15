@@ -115,7 +115,7 @@ constexpr auto extract_all_rows(pqxx::result&& result) noexcept -> std::vector<T
 template <typename T, typename... Args>
 auto one_row_as(pqxx::connection& conn, std::string_view query, Args&&... args) -> std::optional<T> {
     pqxx::work txn(conn);
-    pqxx::result result = txn.exec_params(query.data(), std::forward<Args>(args)...);
+    pqxx::result result = txn.exec(query.data(), pqxx::params(std::forward<Args>(args)...));
 
     if (result.empty()) {
         return std::nullopt;
@@ -168,7 +168,7 @@ auto one_row_as(pqxx::connection& conn, std::string_view query, Args&&... args) 
 template <typename T, typename... Args>
 auto as_set_of(pqxx::connection& conn, std::string_view query, Args&&... args) -> std::optional<std::vector<T>> {
     pqxx::work txn(conn);
-    pqxx::result result = txn.exec_params(query.data(), std::forward<Args>(args)...);
+    pqxx::result result = txn.exec(query.data(), pqxx::params(std::forward<Args>(args)...));
 
     if (result.empty()) {
         return std::nullopt;
@@ -200,7 +200,7 @@ auto as_set_of(pqxx::connection& conn, std::string_view query, Args&&... args) -
 template <typename... Args>
 auto exec_affected(pqxx::connection& conn, std::string_view query, Args&&... args) -> std::size_t {
     pqxx::work txn(conn);
-    pqxx::result result = txn.exec_params(query.data(), std::forward<Args>(args)...);
+    pqxx::result result = txn.exec(query.data(), pqxx::params(std::forward<Args>(args)...));
 
     // end our transaction and return
     txn.commit();
@@ -210,7 +210,7 @@ auto exec_affected(pqxx::connection& conn, std::string_view query, Args&&... arg
 /// @brief Executes a query and returns the number of affected rows,
 ///        automatically unpacking the fields of a record for parameter binding.
 ///
-/// This function executes the provided SQL query using `exec_params` and
+/// This function executes the provided SQL query using `exec` and
 /// returns the number of rows affected by the query. It simplifies the process
 /// of binding parameters to the query by automatically unpacking the fields of
 /// a record object using the `utils::unpack_fields` function.
@@ -222,7 +222,7 @@ auto exec_affected(pqxx::connection& conn, std::string_view query, Args&&... arg
 ///              ($1, $2, etc.) that correspond to the fields of the `record` object.
 /// @param record The object containing the data to be used as parameters for the
 ///               query. The fields of this object are unpacked and passed to
-///               `exec_params` in the order they are defined in the structure.
+///               `exec` in the order they are defined in the structure.
 /// @return The number of rows affected by the executed query.
 ///
 /// @example
