@@ -1,13 +1,13 @@
 # deps
 if(DB_WRAP_USE_EXTERNAL_LIBPQXX)
     message(STATUS "DBWRAP: using external libpqxx")
-    find_package(libpqxx 7.9 REQUIRED)
+    find_package(libpqxx 7.10 REQUIRED)
 else()
     message(STATUS "DBWRAP: fetching libpqxx")
     CPMAddPackage(
       NAME libpqxx
       GITHUB_REPOSITORY jtv/libpqxx
-      GIT_TAG 7.9.2
+      GIT_TAG 7.10.0
       EXCLUDE_FROM_ALL YES
     )
 endif()
@@ -19,7 +19,7 @@ else()
     CPMAddPackage(
       NAME pfr
       GITHUB_REPOSITORY boostorg/pfr
-      GIT_TAG 8cd1a9675d327a058101ef0802789f1830ac2a7e
+      GIT_TAG 3fe5ce61eee743c6da097c28bc0b84bdf29f6cc4
       EXCLUDE_FROM_ALL YES
     )
 endif()
