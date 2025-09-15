@@ -53,7 +53,7 @@ template <typename T>
 constexpr T from_columns(pqxx::row&& row) {
     T obj{};
     boost::pfr::for_each_field(obj, [&](auto& field, std::size_t index) {
-        field = row[index].as<std::decay_t<decltype(field)>>();
+        field = row[static_cast<pqxx::row::size_type>(index)].as<std::decay_t<decltype(field)>>();
     });
     return obj;
 }
