@@ -7,7 +7,7 @@ else()
     CPMAddPackage(
       NAME libpqxx
       GITHUB_REPOSITORY jtv/libpqxx
-      GIT_TAG 7.10.0
+      GIT_TAG 7.10.1
       EXCLUDE_FROM_ALL YES
     )
 endif()
@@ -19,7 +19,8 @@ else()
     CPMAddPackage(
       NAME pfr
       GITHUB_REPOSITORY boostorg/pfr
-      GIT_TAG 3fe5ce61eee743c6da097c28bc0b84bdf29f6cc4
+      # 5034bf55fb6bd1efa7a14955bbb7171c2b3491fc wants to build tests with Boost::core
+      GIT_TAG db9451143a70cbd30ce5a72f4aa294d73c17b7ab
       EXCLUDE_FROM_ALL YES
     )
 endif()
@@ -31,7 +32,7 @@ else()
     CPMAddPackage(
        NAME doctest
        GITHUB_REPOSITORY doctest/doctest
-       GIT_TAG v2.4.11
+       GIT_TAG v2.4.12
        EXCLUDE_FROM_ALL YES
     )
 endif()
