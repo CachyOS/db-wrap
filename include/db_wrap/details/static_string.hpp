@@ -51,8 +51,6 @@ struct static_string {
     /// @brief Append a std::string_view to the string.
     /// @param str The string_view to append.
     constexpr auto operator+=(std::string_view str) noexcept {
-        // assert(str.size() + len < N);
-
         std::copy_n(str.data(), str.size(), value + len);
         len += str.size();
         return *this;

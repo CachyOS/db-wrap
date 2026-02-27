@@ -10,6 +10,7 @@
 #include <db_wrap/sql_utils.hpp>
 
 #include <optional>  // for optional
+#include <utility>   // for std::declval
 
 #include <pqxx/pqxx>
 
@@ -49,7 +50,7 @@ namespace db {
 /// } else {
 ///   std::cout << "User not found!" << std::endl;
 /// }
-template <sql::details::HasSchemeAndId Scheme, typename IdType = Scheme::id>
+template <sql::details::HasSchemeAndId Scheme, typename IdType = decltype(std::declval<const Scheme&>().id)>
 auto find_by_id(pqxx::connection& conn, IdType&& id) -> std::optional<Scheme> {
     constexpr auto kSelectQuery = sql::utils::construct_query_from_condition<Scheme, "id = $1">();
     return db::utils::one_row_as<Scheme>(conn, kSelectQuery, id);
@@ -167,7 +168,7 @@ auto update_fields(pqxx::connection& conn, const Scheme& record) -> std::size_t 
 /// } else {
 ///   std::cout << "Failed to delete user (rows affected: " << rows_affected << ")" << std::endl;
 /// }
-template <sql::details::HasSchemeAndId Scheme, typename IdType = Scheme::id>
+template <sql::details::HasSchemeAndId Scheme, typename IdType = decltype(std::declval<const Scheme&>().id)>
 auto delete_record_by_id(pqxx::connection& conn, IdType&& id) -> std::size_t {
     constexpr auto kDeleteQuery = sql::utils::construct_delete_query_from_condition<Scheme, "id = $1">();
     return db::utils::exec_affected(conn, kDeleteQuery, id);
@@ -248,6 +249,12 @@ template <sql::details::HasSchemeAndId Scheme>
 auto insert_record(pqxx::connection& conn, const Scheme& record) -> std::size_t {
     constexpr auto kInsertAllQuery = sql::utils::create_insert_all_query<Scheme>();
     return db::utils::exec_affected<Scheme>(conn, kInsertAllQuery, record);
+}
+
+template <sql::details::HasSchemeAndId Scheme>
+auto upsert_record(pqxx::connection& conn, const Scheme& record) -> std::size_t {
+    constexpr auto kUpsertAllQuery = sql::utils::create_upsert_all_query<Scheme>();
+    return db::utils::exec_affected<Scheme>(conn, kUpsertAllQuery, record);
 }
 
 }  // namespace db

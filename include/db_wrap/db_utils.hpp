@@ -31,7 +31,7 @@ namespace db::utils {
 /// @param row The pqxx::row to convert.
 /// @return An object of type `T` filled with the data from the row.
 template <typename T>
-constexpr T from_row(pqxx::row&& row) noexcept {
+constexpr T from_row(pqxx::row&& row) {
     T obj{};
     boost::pfr::for_each_field_with_name(obj, [&](std::string_view field_name, auto& field) {
         field = row[pqxx::zview(field_name)].as<std::decay_t<decltype(field)>>();
@@ -69,7 +69,7 @@ constexpr T from_columns(pqxx::row&& row) {
 /// @param result The pqxx::result containing the rows.
 /// @return A vector of objects of type `T` representing the extracted rows.
 template <typename T>
-constexpr auto extract_all_rows(pqxx::result&& result) noexcept -> std::vector<T> {
+constexpr auto extract_all_rows(pqxx::result&& result) -> std::vector<T> {
     std::vector<T> rows{};
     rows.reserve(static_cast<std::size_t>(result.size()));
     std::ranges::transform(result, std::back_inserter(rows),

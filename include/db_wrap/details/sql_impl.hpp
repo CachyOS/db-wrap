@@ -30,7 +30,7 @@ namespace db::sql::details {
 template <typename T>
 concept HasName = requires(T t) {
     { T::kName } -> std::convertible_to<std::string_view>;
-    !std::string_view{T::kName}.empty();
+    requires !std::string_view{T::kName}.empty();
 };
 
 /// @brief Concept that checks if a type has an 'id' field.
@@ -51,6 +51,14 @@ concept HasIdField = requires(T t) {
 /// 'id' field.
 template <typename T>
 concept HasSchemeAndId = details::HasName<T> && details::HasIdField<T>;
+
+template <HasName Scheme>
+consteval auto table_name_str() noexcept {
+    constexpr std::string_view db_name_str = Scheme::kName;
+    ::db::details::static_string<db_name_str.size() + 1> res{};
+    res += db_name_str;
+    return res;
+}
 
 /// @brief Appends a formatted field assignment expression to a string.
 ///
@@ -306,6 +314,71 @@ constexpr void insert_query_all_str(auto&& dest) noexcept {
             }
         }
         dest += ");"sv;
+    }
+}
+
+template <HasSchemeAndId Scheme>
+constexpr void upsert_query_all_str(auto&& dest) noexcept {
+    using namespace std::string_view_literals;
+
+    constexpr auto valid_fields       = utils::get_struct_names<std::remove_cvref_t<Scheme>>();
+    constexpr std::int32_t names_size = valid_fields.size();
+
+    {
+        std::int32_t i{};
+        dest += "INSERT INTO "sv;
+        dest += Scheme::kName;
+        dest += " ("sv;
+
+        for (auto&& valid_field : valid_fields) {
+            dest += valid_field;
+            if (i + 1 < names_size) {
+                dest += ", "sv;
+            }
+            ++i;
+        }
+        dest += ") VALUES"sv;
+    }
+
+    {
+        dest += " ("sv;
+        for (auto&& field_idx : std::ranges::views::iota(0, names_size)) {
+            std::array<char, 10> buf{};
+            utils::itoa_d(field_idx + 1, buf.data());
+            dest += "$"sv;
+            dest += buf.data();
+            if (field_idx + 1 < names_size) {
+                dest += ", "sv;
+            }
+        }
+        dest += ")"sv;
+    }
+
+    // generate ON CONFLICT (id) DO UPDATE SET col = EXCLUDED.col, ...
+    {
+        dest += " ON CONFLICT (id) DO UPDATE SET "sv;
+
+        constexpr std::int32_t non_id_size = [&]() {
+            if (std::ranges::find(valid_fields, "id"sv) != valid_fields.end()) {
+                return names_size - 1;
+            }
+            return names_size;
+        }();
+
+        std::int32_t i{};
+        for (auto&& valid_field : valid_fields) {
+            if (valid_field == "id"sv) {
+                continue;
+            }
+            dest += valid_field;
+            dest += " = EXCLUDED."sv;
+            dest += valid_field;
+            if (i + 1 < non_id_size) {
+                dest += ", "sv;
+            }
+            ++i;
+        }
+        dest += ";"sv;
     }
 }
 

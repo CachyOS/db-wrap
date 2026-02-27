@@ -82,13 +82,7 @@ consteval auto create_update_query() noexcept {
 /// static_assert(query == "SELECT * FROM users WHERE id = 1;");
 template <details::HasName Scheme, ::db::details::static_string query>
 consteval auto construct_query_from_condition() noexcept {
-    constexpr auto kDbName = []() {
-        constexpr std::string_view db_name_str = Scheme::kName;
-        ::db::details::static_string<db_name_str.size()> res{};
-        res += db_name_str;
-        return res;
-    }();
-
+    constexpr auto kDbName         = details::table_name_str<Scheme>();
     constexpr auto kStatementBegin = ::db::details::static_string("SELECT * FROM ");
     constexpr auto kSelectWhere    = kStatementBegin + kDbName + ::db::details::static_string(" WHERE ");
     return kSelectWhere + query + ::db::details::static_string(";");
@@ -158,13 +152,7 @@ consteval auto create_update_all_query() noexcept {
 /// static_assert(query == "SELECT * FROM users;");
 template <details::HasName Scheme>
 consteval auto construct_select_all_query() noexcept {
-    constexpr auto kDbName = []() {
-        constexpr std::string_view db_name_str = Scheme::kName;
-        ::db::details::static_string<db_name_str.size()> res{};
-        res += db_name_str;
-        return res;
-    }();
-
+    constexpr auto kDbName         = details::table_name_str<Scheme>();
     constexpr auto kStatementBegin = ::db::details::static_string("SELECT * FROM ");
     return kStatementBegin + kDbName + ::db::details::static_string(";");
 }
@@ -192,13 +180,7 @@ consteval auto construct_select_all_query() noexcept {
 /// static_assert(query == "DELETE FROM users WHERE name = 'John Doe';");
 template <details::HasName Scheme, ::db::details::static_string query>
 consteval auto construct_delete_query_from_condition() noexcept {
-    constexpr auto kDbName = []() {
-        constexpr std::string_view db_name_str = Scheme::kName;
-        ::db::details::static_string<db_name_str.size()> res{};
-        res += db_name_str;
-        return res;
-    }();
-
+    constexpr auto kDbName         = details::table_name_str<Scheme>();
     constexpr auto kStatementBegin = ::db::details::static_string("DELETE FROM ");
     constexpr auto kSelectWhere    = kStatementBegin + kDbName + ::db::details::static_string(" WHERE ");
     return kSelectWhere + query + ::db::details::static_string(";");
@@ -235,6 +217,18 @@ consteval auto create_insert_all_query() noexcept {
     }();
     ::db::details::static_string<static_size> res{};
     details::insert_query_all_str<Scheme>(res);
+    return res;
+}
+
+template <details::HasSchemeAndId Scheme>
+consteval auto create_upsert_all_query() noexcept {
+    constexpr auto static_size = []() {
+        std::string res{};
+        details::upsert_query_all_str<Scheme>(res);
+        return res.size() + 1;
+    }();
+    ::db::details::static_string<static_size> res{};
+    details::upsert_query_all_str<Scheme>(res);
     return res;
 }
 
