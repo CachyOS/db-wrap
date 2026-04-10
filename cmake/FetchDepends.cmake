@@ -1,13 +1,13 @@
 # deps
 if(DB_WRAP_USE_EXTERNAL_LIBPQXX)
     message(STATUS "DBWRAP: using external libpqxx")
-    find_package(libpqxx 7.10 REQUIRED)
+    find_package(libpqxx 8 REQUIRED)
 else()
     message(STATUS "DBWRAP: fetching libpqxx")
     CPMAddPackage(
       NAME libpqxx
       GITHUB_REPOSITORY jtv/libpqxx
-      GIT_TAG 7.10.1
+      GIT_TAG 8.0.1
       EXCLUDE_FROM_ALL YES
     )
 endif()
@@ -32,7 +32,7 @@ else()
     CPMAddPackage(
        NAME doctest
        GITHUB_REPOSITORY doctest/doctest
-       GIT_TAG v2.4.12
+       GIT_TAG v2.5.1
        EXCLUDE_FROM_ALL YES
     )
 endif()

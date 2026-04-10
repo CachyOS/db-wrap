@@ -21,17 +21,17 @@
 
 namespace db::utils {
 
-/// @brief Helper function to convert a pqxx::row to a user-defined type.
+/// @brief Helper function to convert a pqxx::row_ref to a user-defined type.
 ///
 /// This function utilizes Boost.PFR to iterate over the fields of the
 /// user-defined type `T` and extract the corresponding values from the
-/// `pqxx::row`.
+/// `pqxx::row_ref`.
 ///
 /// @tparam T The type to convert the row to.
-/// @param row The pqxx::row to convert.
+/// @param row The pqxx::row_ref to convert.
 /// @return An object of type `T` filled with the data from the row.
 template <typename T>
-constexpr T from_row(pqxx::row&& row) noexcept {
+constexpr T from_row(pqxx::row_ref&& row) noexcept {
     T obj{};
     boost::pfr::for_each_field_with_name(obj, [&](std::string_view field_name, auto& field) {
         field = row[pqxx::zview(field_name)].as<std::decay_t<decltype(field)>>();
@@ -39,21 +39,21 @@ constexpr T from_row(pqxx::row&& row) noexcept {
     return obj;
 }
 
-/// @brief Helper function to convert a pqxx::row to a user-defined type.
+/// @brief Helper function to convert a pqxx::row_ref to a user-defined type.
 ///
 /// This function utilizes Boost.PFR to iterate over the fields of the
 /// user-defined type `T` and extract the corresponding values from the
-/// `pqxx::row`. It assumes that the order of fields in `T` matches the
+/// `pqxx::row_ref`. It assumes that the order of fields in `T` matches the
 /// order of columns in the row.
 ///
 /// @tparam T The type to convert the row to.
-/// @param row The pqxx::row to convert.
+/// @param row The pqxx::row_ref to convert.
 /// @return An object of type `T` filled with the data from columns.
 template <typename T>
-constexpr T from_columns(pqxx::row&& row) {
+constexpr T from_columns(pqxx::row_ref&& row) {
     T obj{};
     boost::pfr::for_each_field(obj, [&](auto& field, std::size_t index) {
-        field = row[static_cast<pqxx::row::size_type>(index)].as<std::decay_t<decltype(field)>>();
+        field = row[static_cast<pqxx::row_ref::size_type>(index)].as<std::decay_t<decltype(field)>>();
     });
     return obj;
 }
