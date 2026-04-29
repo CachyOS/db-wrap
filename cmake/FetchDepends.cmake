@@ -24,6 +24,9 @@ else()
       EXCLUDE_FROM_ALL YES
     )
 endif()
+
+# fetch doctest only with testing
+if(DB_WRAP_ENABLE_TESTING)
 if(DB_WRAP_USE_EXTERNAL_DOCTEST)
     message(STATUS "DBWRAP: using external doctest")
     find_package(doctest 2 REQUIRED)
@@ -35,6 +38,7 @@ else()
        GIT_TAG v2.5.1
        EXCLUDE_FROM_ALL YES
     )
+endif()
 endif()
 
 # C++26 <meta> reflection support (P2996)
