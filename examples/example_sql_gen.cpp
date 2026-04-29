@@ -29,11 +29,12 @@ int main() {
 
     db::utils::exec_affected(conn, kCreateTable);
 
-    // Construct a compile-time SELECT query
+    //! [construct_query_from_condition]
     constexpr auto kSelectQuery = db::sql::utils::construct_query_from_condition<Product, "price > 10.0">();
     std::cout << "Generated SQL Query: " << std::string_view{kSelectQuery} << std::endl;
+    //! [construct_query_from_condition]
 
-    // Use the query with as_set_of
+    //! [as_set_of]
     auto products = db::utils::as_set_of<Product>(conn, kSelectQuery);
     if (products) {
         for (auto&& product : *products) {
@@ -42,4 +43,5 @@ int main() {
     } else {
         std::cout << "No products found with price > 10.0" << std::endl;
     }
+    //! [as_set_of]
 }

@@ -50,64 +50,67 @@ if (DB_WRAP_ENABLE_EXAMPLES)
 endif()
 
 # docs gen
-#find_package(Doxygen QUIET)
-#if (DOXYGEN_FOUND)
-#    set(DOXYGEN_GENERATE_HTML YES)
-#    set(DOXYGEN_HTML_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/docs")
-#    set(DOXYGEN_BUILTIN_STL_SUPPORT YES)
-#    set(DOXYGEN_USE_MDFILE_AS_MAINPAGE README.md)
-#
-#    # ref https://github.com/PacktPublishing/Modern-CMake-for-Cpp-2E/blob/main/examples/ch13/02-doxygen-nice/cmake/Doxygen.cmake
-#    FetchContent_Declare(doxygen-awesome-css
-#        GIT_REPOSITORY
-#          https://github.com/jothepro/doxygen-awesome-css.git
-#        GIT_TAG
-#          v2.3.1
-#    )
-#    FetchContent_MakeAvailable(doxygen-awesome-css)
-#    FetchContent_GetProperties(doxygen-awesome-css SOURCE_DIR AWESOME_CSS_DIR)
-#
-#    # Customize Doxygen settings for enhanced output
-#    set(DOXYGEN_GENERATE_TREEVIEW YES)
-#    set(DOXYGEN_DISABLE_INDEX NO)
-#    set(DOXYGEN_FULL_SIDEBAR NO)
-#    set(DOXYGEN_HTML_COLORSTYLE LIGHT)
-#
-#    # Use Doxygen Awesome CSS for styling
-#    set(DOXYGEN_HTML_EXTRA_STYLESHEET "${AWESOME_CSS_DIR}/doxygen-awesome.css")
-#    set(DOXYGEN_HTML_EXTRA_FILES
-#        "${AWESOME_CSS_DIR}/doxygen-awesome-darkmode-toggle.js"
-#        "${AWESOME_CSS_DIR}/doxygen-awesome-fragment-copy-button.js"
-#        "${AWESOME_CSS_DIR}/doxygen-awesome-paragraph-link.js"
-#        "${AWESOME_CSS_DIR}/doxygen-awesome-interactive-toc.js"
-#    )
-#
-#    # Strip the project source directory from include paths in the documentation
-#    set(DOXYGEN_STRIP_FROM_INC_PATH "${PROJECT_SOURCE_DIR}/include")
-#    set(DOXYGEN_EXAMPLE_PATTERNS *)
-#
-#    execute_process(COMMAND doxygen -w html header.html footer.html style.css
-#                    WORKING_DIRECTORY ${PROJECT_BINARY_DIR})
-#    execute_process(COMMAND sed -i "/<\\/head>/r ${PROJECT_SOURCE_DIR}/cmake/extra_headers" header.html
-#                    WORKING_DIRECTORY ${PROJECT_BINARY_DIR})
-#    set(DOXYGEN_HTML_HEADER ${PROJECT_BINARY_DIR}/header.html)
-#
-#    # Generate Doxygen documentation
-#    doxygen_add_docs(doxygen
-#        "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
-#        "${CMAKE_CURRENT_SOURCE_DIR}/include" # Process headers in the include directory
-#        "${CMAKE_CURRENT_SOURCE_DIR}/docs"
-#        COMMENT "Generating Doxygen documentation"
-#    )
+if (DB_WRAP_ENABLE_DOCS)
+find_package(Doxygen QUIET)
+if (DOXYGEN_FOUND)
+    set(DOXYGEN_GENERATE_HTML YES)
+    set(DOXYGEN_HTML_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/docs")
+    set(DOXYGEN_BUILTIN_STL_SUPPORT YES)
+    set(DOXYGEN_USE_MDFILE_AS_MAINPAGE "${CMAKE_CURRENT_SOURCE_DIR}/docs/en/index.md")
+    set(DOXYGEN_LAYOUT_FILE "${CMAKE_CURRENT_SOURCE_DIR}/docs/layout.xml")
+    set(DOXYGEN_JAVADOC_AUTOBRIEF YES)
+    set(DOXYGEN_WARN_IF_UNDOCUMENTED NO)
+    set(DOXYGEN_EXCLUDE_PATTERNS "*/details/*" "*/doxygen-awesome-css/*")
+    set(DOXYGEN_EXCLUDE_SYMBOLS "details")
+    set(DOXYGEN_EXAMPLE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/examples")
 
-#    file(GLOB DB_WRAP_EXAMPLE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/examples/examples_*.cpp")
-#    foreach(DB_WRAP_EXAMPLE_FILE ${DB_WRAP_EXAMPLE_FILES})
-#        get_filename_component(DB_WRAP_EXAMPLE_NAME ${DB_WRAP_EXAMPLE_FILE} NAME_WE)
-#        doxygen_add_example(doxygen ${DB_WRAP_EXAMPLE_FILE} "${DB_WRAP_EXAMPLE_NAME}")
-#    endforeach()
-#else()
-#    message(WARNING "DBWRAP: Doxygen not found, documentation will not be generated.")
-#endif()
+    # ref https://github.com/PacktPublishing/Modern-CMake-for-Cpp-2E/blob/main/examples/ch13/02-doxygen-nice/cmake/Doxygen.cmake
+    FetchContent_Declare(doxygen-awesome-css
+        GIT_REPOSITORY
+          https://github.com/jothepro/doxygen-awesome-css.git
+        GIT_TAG
+          v2.4.2
+    )
+    FetchContent_MakeAvailable(doxygen-awesome-css)
+    FetchContent_GetProperties(doxygen-awesome-css SOURCE_DIR AWESOME_CSS_DIR)
+
+    # Customize Doxygen settings for enhanced output
+    set(DOXYGEN_GENERATE_TREEVIEW YES)
+    set(DOXYGEN_DISABLE_INDEX NO)
+    set(DOXYGEN_FULL_SIDEBAR NO)
+    set(DOXYGEN_HTML_COLORSTYLE LIGHT)
+
+    # Use Doxygen Awesome CSS for styling
+    set(DOXYGEN_HTML_EXTRA_STYLESHEET "${AWESOME_CSS_DIR}/doxygen-awesome.css")
+    set(DOXYGEN_HTML_EXTRA_FILES
+        "${AWESOME_CSS_DIR}/doxygen-awesome-darkmode-toggle.js"
+        "${AWESOME_CSS_DIR}/doxygen-awesome-fragment-copy-button.js"
+        "${AWESOME_CSS_DIR}/doxygen-awesome-paragraph-link.js"
+        "${AWESOME_CSS_DIR}/doxygen-awesome-interactive-toc.js"
+    )
+
+    # Strip the project source directory from include paths in the documentation
+    set(DOXYGEN_STRIP_FROM_INC_PATH "${PROJECT_SOURCE_DIR}/include")
+    set(DOXYGEN_EXAMPLE_PATTERNS *.cpp *.hpp *.md)
+
+    execute_process(COMMAND doxygen -w html header.html footer.html style.css
+                    WORKING_DIRECTORY ${PROJECT_BINARY_DIR})
+    execute_process(COMMAND sed -i "/<\\/head>/r ${PROJECT_SOURCE_DIR}/cmake/extra_headers" header.html
+                    WORKING_DIRECTORY ${PROJECT_BINARY_DIR})
+    set(DOXYGEN_HTML_HEADER ${PROJECT_BINARY_DIR}/header.html)
+
+    # Examples discoverable through EXAMPLE_PATH; \example directives in
+    # the headers (db_api.hpp) register them in the "Examples" tab and
+    # @snippet pulls tagged regions inline.
+    doxygen_add_docs(doxygen
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"   # public API headers
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/en"   # markdown pages + def_groups.hpp
+        COMMENT "Generating Doxygen documentation"
+    )
+else()
+    message(WARNING "DBWRAP: Doxygen not found, documentation will not be generated.")
+endif()
+endif()
 
 # install targets
 write_basic_package_version_file(

@@ -23,25 +23,28 @@ CREATE TEMPORARY TABLE IF NOT EXISTS users (
 )~";
 inline constexpr auto CONNECTION_URL = "postgresql://postgres:password@localhost:15432/testdb";
 
+//! [full]
 int main() {
     // Create a connection object
     pqxx::connection conn(CONNECTION_URL);
 
     db::utils::exec_affected(conn, kCreateTable);
 
-    // Insert a new user
+    //! [insert_record]
     User new_user{0, "Alice", "alice@example.com"};
     db::insert_record(conn, new_user);
+    //! [insert_record]
 
-    // Find a user by ID
+    //! [find_by_id]
     auto user = db::find_by_id<User>(conn, 1);
     if (user) {
         std::cout << "User found: " << user->name << std::endl;
     } else {
         std::cout << "User not found!" << std::endl;
     }
+    //! [find_by_id]
 
-    // Retrieve all users
+    //! [get_all_records]
     auto users = db::get_all_records<User>(conn);
     if (users) {
         for (auto&& user : *users) {
@@ -50,4 +53,6 @@ int main() {
     } else {
         std::cout << "No users found!" << std::endl;
     }
+    //! [get_all_records]
 }
+//! [full]

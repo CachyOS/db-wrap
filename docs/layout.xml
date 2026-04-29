@@ -1,8 +1,7 @@
 <doxygenlayout version="1.0">
   <!-- Navigation index tabs for HTML output -->
   <navindex>
-    <tab type="mainpage" visible="no" title="Landing"/>
-    <tab type="usergroup" title="Documentation" url="@ref md_en_2index"/>
+    <tab type="mainpage" visible="yes" title="Documentation"/>
     <tab type="topics" visible="yes" title="API Groups" intro=""/>
     <tab type="namespacelist" visible="yes" title="Namespaces" intro=""/>
     <tab type="usergroup" visible="yes" title="Reference">

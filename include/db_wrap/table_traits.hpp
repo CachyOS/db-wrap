@@ -5,6 +5,10 @@
  */
 #pragma once
 
+/// @file db_wrap/table_traits.hpp
+/// @brief Customization point: `db::table_traits<T>` and column-routing helpers.
+/// @ingroup db_traits
+
 #include <algorithm>    // for contains, find_if
 #include <array>        // for array
 #include <concepts>     // for convertible_to
@@ -18,6 +22,7 @@
 
 namespace db {
 
+/// @ingroup db_traits
 /// @brief Primary template for table metadata traits (Rust-trait style).
 ///
 /// Users plug compile-time table metadata into the library by specializing
@@ -49,7 +54,7 @@ namespace db {
 /// so existing user code that predates `table_traits` keeps working
 /// unchanged.
 ///
-/// @example
+/// ```cpp
 /// struct Account {
 ///     std::int64_t user_id;
 ///     std::string  full_name;
@@ -76,6 +81,7 @@ namespace db {
 /// auto found = db::find_by_id<Account>(conn, std::int64_t{42});
 /// auto rows  = db::get_all_records<Account>(conn);
 /// db::insert_record(conn, acct);
+/// ```
 template <typename T>
 struct table_traits;
 
@@ -110,8 +116,11 @@ struct table_traits<T> {
     static constexpr std::array<std::string_view, 0> update_exclude{};
 };
 
-/// @brief Concept that gates every high-level `db::*` API on a well-formed
-///        `table_traits<T>` specialization.
+/// @ingroup db_traits
+/// @brief Concept gating every high-level `db::*` API.
+///
+/// `T` models `DbTable` iff a `table_traits<T>` specialization exposes the
+/// required `table_name`, `primary_key` and `primary_key_type` members.
 template <typename T>
 concept DbTable = requires {
     { table_traits<T>::table_name } -> std::convertible_to<std::string_view>;

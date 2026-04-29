@@ -21,11 +21,13 @@ auto ask_user_for_friend(UserInfo&& info) -> UserInfo {
 }
 
 auto retrieve_friend(pqxx::connection& conn, std::string_view name) -> UserInfo {
+    //! [one_row_as]
     auto info = db::utils::one_row_as<UserInfo>(
         conn,
         "SELECT id, name, email, login FROM user_infos WHERE name = $1",
         name
     );
+    //! [one_row_as]
 
     if (!info.has_value()) {
         throw std::runtime_error("User not found");

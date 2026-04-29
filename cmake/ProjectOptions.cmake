@@ -28,6 +28,7 @@ endif()
 
 option(DB_WRAP_ENABLE_TESTING "Enable tests" ${DB_WRAP_MAIN_PROJECT})
 option(DB_WRAP_ENABLE_EXAMPLES "Enable examples" ${DB_WRAP_MAIN_PROJECT})
+option(DB_WRAP_ENABLE_DOCS "Enable docs" ${DB_WRAP_MAIN_PROJECT})
 option(DB_WRAP_USE_EXTERNAL_LIBPQXX "Use an external libpqxx library" ${DB_WRAP_SUB_PROJECT})
 option(DB_WRAP_USE_EXTERNAL_PFR "Use external pfr library" ${DB_WRAP_SUB_PROJECT})
 option(DB_WRAP_USE_EXTERNAL_DOCTEST "Use external doctest library" ${DB_WRAP_SUB_PROJECT})

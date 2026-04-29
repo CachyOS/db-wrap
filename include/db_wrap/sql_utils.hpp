@@ -5,6 +5,10 @@
  */
 #pragma once
 
+/// @file db_wrap/sql_utils.hpp
+/// @brief Compile-time SQL builders under `db::sql::utils`.
+/// @ingroup db_sql
+
 #include <db_wrap/details/sql_impl.hpp>
 #include <db_wrap/details/static_string.hpp>
 #include <db_wrap/table_traits.hpp>
@@ -18,22 +22,19 @@
 
 namespace db::sql::utils {
 
-/// @brief Creates an SQL UPDATE query string at compile time.
+/// @ingroup db_sql
+/// @brief Build a compile-time `UPDATE` statement for a chosen field set.
 ///
-/// This function generates an SQL query string for updating records in a
-/// database table based on the provided `Scheme` and `Fields`. The query
-/// is constructed at compile time, resulting in a `db::details::static_string`
-/// that can be used directly in your code.
+/// Produces `UPDATE <table> SET <f2>=$2, <f3>=$3, ... WHERE <pk>=$1;`.
+/// Field names are C++ struct member names; column-name remapping
+/// declared in `table_traits<Scheme>::column_overrides` is applied.
 ///
-/// @see https://godbolt.org/z/K71ecnoa6 for a demonstration.
+/// @tparam Scheme Must satisfy @ref db::DbTable.
+/// @tparam Fields Pack of `db::details::static_string` C++ field names.
+/// @return A `db::details::static_string` holding the rendered SQL.
+/// @see https://godbolt.org/z/K71ecnoa6 for a live demonstration.
 ///
-/// @tparam Scheme The type representing the database table scheme.
-///                Must satisfy the `db::DbTable` concept.
-/// @tparam Fields A pack of `db::details::static_string` representing the
-///                names of the fields to be updated.
-/// @return A `db::details::static_string` containing the generated SQL query.
-///
-/// @example
+/// ```cpp
 /// struct User {
 ///   static constexpr std::string_view kName = "users";
 ///   int id;
@@ -43,7 +44,7 @@ namespace db::sql::utils {
 ///
 /// constexpr auto query = db::sql::utils::create_update_query<User, "name", "age">();
 /// static_assert(query == "UPDATE users SET name = $2, age = $3 WHERE id = $1;");
-/// // This will compile successfully as the query is generated correctly.
+/// ```
 template <::db::DbTable Scheme, ::db::details::static_string... Fields>
 consteval auto create_update_query() noexcept {
     constexpr auto static_size = []() {
@@ -56,31 +57,19 @@ consteval auto create_update_query() noexcept {
     return res;
 }
 
-/// @brief Constructs a SELECT query with a WHERE clause at compile time.
+/// @ingroup db_sql
+/// @brief Build a compile-time `SELECT * FROM <table> WHERE <cond>;`.
 ///
-/// This function generates a SQL SELECT query string at compile time,
-/// retrieving all columns (*) from a table specified by
-/// `table_traits<Scheme>::table_name`. The query includes a WHERE clause
-/// based on the provided `query` condition.
+/// `<cond>` is a free-form `static_string` template argument, so callers
+/// can embed any literal predicate (e.g. `"id = 1"`, `"price > 10.0"`).
+/// For parameterized lookups by primary key, prefer
+/// @ref construct_find_by_pk_query.
 ///
-/// The function uses `db::details::static_string` to construct the query string
-/// at compile time, ensuring that the query is readily available for use
-/// without runtime overhead.
+/// @tparam Scheme Must satisfy @ref db::DbTable.
+/// @tparam query WHERE-clause body as a `static_string`.
+/// @return A `db::details::static_string` holding the rendered SQL.
 ///
-/// @tparam Scheme The type representing the database table scheme. It must
-///                satisfy the `db::DbTable` concept.
-/// @tparam query A `db::details::static_string` representing the WHERE clause
-///              condition.
-/// @return A `db::details::static_string` containing the constructed SELECT query.
-///
-/// @example
-/// struct User {
-///   static constexpr std::string_view kName = "users";
-///   // ... other members ...
-/// };
-///
-/// constexpr auto query = db::sql::utils::construct_query_from_condition<User, "id = 1">();
-/// static_assert(query == "SELECT * FROM users WHERE id = 1;");
+/// @snippet example_sql_gen.cpp construct_query_from_condition
 template <::db::DbTable Scheme, ::db::details::static_string query>
 consteval auto construct_query_from_condition() noexcept {
     constexpr auto kDbName = []() {
@@ -95,34 +84,20 @@ consteval auto construct_query_from_condition() noexcept {
     return kSelectWhere + query + ::db::details::static_string(";");
 }
 
-/// @brief Creates an SQL UPDATE query string at compile time to update all fields
-///        (except the primary key, and any field listed in `update_exclude`)
-///        in a table based on the provided scheme.
+/// @ingroup db_sql
+/// @brief Build a compile-time `UPDATE` statement covering every eligible field.
 ///
-/// This function generates an SQL query string for updating all eligible
-/// fields of a database table, excluding the primary-key column (which
-/// is used in the WHERE clause to identify the record to update) and any
-/// fields declared in `table_traits<Scheme>::update_exclude`. It utilizes
-/// `table_traits<Scheme>::table_name` to determine the table name and
-/// leverages the structure of the `Scheme` type to create the SET clause.
+/// Sets every column of `Scheme` except the primary key (which lives in
+/// the WHERE clause) and any field declared in
+/// `table_traits<Scheme>::update_exclude`.
 ///
-/// The generated query string is returned as a `db::details::static_string`, suitable
-/// for use in compile-time contexts.
+/// @tparam Scheme Must satisfy @ref db::DbTable.
+/// @return A `db::details::static_string` holding the rendered SQL.
 ///
-/// @tparam Scheme The type representing the database table scheme.
-///                Must satisfy the `db::DbTable` concept.
-/// @return A `db::details::static_string` containing the generated SQL query string.
-///
-/// @example
-/// struct User {
-///   static constexpr std::string_view kName = "users";
-///   int id;
-///   std::string name;
-///   int age;
-/// };
-///
+/// ```cpp
 /// constexpr auto query = db::sql::utils::create_update_all_query<User>();
 /// static_assert(query == "UPDATE users SET name = $2, age = $3 WHERE id = $1;");
+/// ```
 template <::db::DbTable Scheme>
 consteval auto create_update_all_query() noexcept {
     // NOTE: for now we hardcode generating where clause for id field
@@ -138,27 +113,11 @@ consteval auto create_update_all_query() noexcept {
     return res;
 }
 
-/// @brief Constructs a SQL SELECT query to retrieve all rows from a table.
+/// @ingroup db_sql
+/// @brief Build a compile-time `SELECT * FROM <table>;`.
 ///
-/// This function generates a compile-time SQL SELECT query string that
-/// selects all columns (*) from the table specified by
-/// `table_traits<Scheme>::table_name`.
-///
-/// The generated query string is returned as a `db::details::static_string`, suitable
-/// for use in compile-time contexts.
-///
-/// @tparam Scheme The type representing the database table scheme.
-///                Must satisfy the `db::DbTable` concept.
-/// @return A `db::details::static_string` containing the generated SQL query string.
-///
-/// @example
-/// struct User {
-///   static constexpr std::string_view kName = "users";
-///   // ... other members ...
-/// };
-///
-/// constexpr auto query = db::sql::utils::construct_select_all_query<User>();
-/// static_assert(query == "SELECT * FROM users;");
+/// @tparam Scheme Must satisfy @ref db::DbTable.
+/// @return A `db::details::static_string` holding the rendered SQL.
 template <::db::DbTable Scheme>
 consteval auto construct_select_all_query() noexcept {
     constexpr auto kDbName = []() {
@@ -172,27 +131,16 @@ consteval auto construct_select_all_query() noexcept {
     return kStatementBegin + kDbName + ::db::details::static_string(";");
 }
 
-/// @brief Constructs a SQL DELETE query with a WHERE clause at compile time.
+/// @ingroup db_sql
+/// @brief Build a compile-time `DELETE FROM <table> WHERE <cond>;`.
 ///
-/// This function generates a SQL DELETE query string at compile time,
-/// removing records from the table specified by
-/// `table_traits<Scheme>::table_name`. The query includes a WHERE clause
-/// based on the provided `query` condition.
+/// Free-form WHERE-clause counterpart of
+/// @ref construct_query_from_condition. For parameterized deletion by
+/// primary key, prefer @ref construct_delete_by_pk_query.
 ///
-/// @tparam Scheme The type representing the database table scheme. It must
-///                satisfy the `db::DbTable` concept.
-/// @tparam query A `db::details::static_string` representing the WHERE clause
-///              condition.
-/// @return A `db::details::static_string` containing the constructed DELETE query.
-///
-/// @example
-/// struct User {
-///   static constexpr std::string_view kName = "users";
-///   // ... other members ...
-/// };
-///
-/// constexpr auto query = db::sql::utils::construct_delete_query_from_condition<User, "name = 'John Doe'">();
-/// static_assert(query == "DELETE FROM users WHERE name = 'John Doe';");
+/// @tparam Scheme Must satisfy @ref db::DbTable.
+/// @tparam query WHERE-clause body as a `static_string`.
+/// @return A `db::details::static_string` holding the rendered SQL.
 template <::db::DbTable Scheme, ::db::details::static_string query>
 consteval auto construct_delete_query_from_condition() noexcept {
     constexpr auto kDbName = []() {
@@ -207,31 +155,22 @@ consteval auto construct_delete_query_from_condition() noexcept {
     return kSelectWhere + query + ::db::details::static_string(";");
 }
 
-/// @brief Creates an SQL INSERT query string at compile time to insert all fields
-///        of a record into a table based on the provided scheme.
+/// @ingroup db_sql
+/// @brief Build a compile-time `INSERT INTO <table> (<cols>) VALUES (...);`.
 ///
-/// This function generates an SQL query string for inserting a new record into
-/// a database table. It uses `table_traits<Scheme>::table_name` to determine
-/// the table name and walks the structure of the `Scheme` type to construct
-/// the column list and values placeholders. Fields declared in
-/// `table_traits<Scheme>::insert_exclude` are omitted from the column list
-/// and from the value placeholders, and the placeholder indices are
-/// renumbered accordingly.
+/// Uses `table_traits<Scheme>::table_name` for the target and walks the
+/// fields of `Scheme` for the column list and `$N` placeholders. Fields
+/// declared in `table_traits<Scheme>::insert_exclude` are dropped from
+/// both the column list and the value list, and remaining placeholders
+/// are renumbered accordingly.
 ///
-/// @tparam Scheme The type representing the database table scheme.
-///                Must satisfy the `db::DbTable` concept.
-/// @return A `db::details::static_string` containing the generated SQL query string.
+/// @tparam Scheme Must satisfy @ref db::DbTable.
+/// @return A `db::details::static_string` holding the rendered SQL.
 ///
-/// @example
-/// struct User {
-///   static constexpr std::string_view kName = "users";
-///   int id;
-///   std::string name;
-///   int age;
-/// };
-///
+/// ```cpp
 /// constexpr auto query = db::sql::utils::create_insert_all_query<User>();
 /// static_assert(query == "INSERT INTO users (id, name, age) VALUES ($1, $2, $3);");
+/// ```
 template <::db::DbTable Scheme>
 consteval auto create_insert_all_query() noexcept {
     constexpr auto static_size = []() {
@@ -244,16 +183,16 @@ consteval auto create_insert_all_query() noexcept {
     return res;
 }
 
-/// @brief Constructs a `SELECT * FROM <table> WHERE <pk> = $1;` query at
-///        compile time, where `<pk>` is `table_traits<Scheme>::primary_key`.
+/// @ingroup db_sql
+/// @brief Build a compile-time `SELECT * FROM <table> WHERE <pk> = $1;`.
 ///
-/// This is the trait-aware companion to `construct_query_from_condition`,
-/// used by `db::find_by_id` so that the WHERE-clause column name and the
-/// `$1` placeholder reflect the table's actual primary-key column.
+/// Trait-aware companion of @ref construct_query_from_condition used by
+/// @ref db::find_by_id, so the WHERE-clause column name and the `$1`
+/// placeholder reflect the table's actual primary-key column instead of
+/// a hard-coded `id`.
 ///
-/// @tparam Scheme The type representing the database table scheme.
-///                Must satisfy the `db::DbTable` concept.
-/// @return A `db::details::static_string` containing the generated SQL query string.
+/// @tparam Scheme Must satisfy @ref db::DbTable.
+/// @return A `db::details::static_string` holding the rendered SQL.
 template <::db::DbTable Scheme>
 consteval auto construct_find_by_pk_query() noexcept {
     constexpr auto kDbName = []() {
@@ -274,17 +213,15 @@ consteval auto construct_find_by_pk_query() noexcept {
     return kSelectWhere + kPkName + ::db::details::static_string(" = $1;");
 }
 
-/// @brief Constructs a `DELETE FROM <table> WHERE <pk> = $1;` query at
-///        compile time, where `<pk>` is `table_traits<Scheme>::primary_key`.
+/// @ingroup db_sql
+/// @brief Build a compile-time `DELETE FROM <table> WHERE <pk> = $1;`.
 ///
-/// This is the trait-aware companion to
-/// `construct_delete_query_from_condition`, used by
-/// `db::delete_record_by_id` so that the WHERE clause references the
-/// table's actual primary-key column rather than a hard-coded `id`.
+/// Trait-aware companion of @ref construct_delete_query_from_condition
+/// used by @ref db::delete_record_by_id, so the WHERE clause references
+/// the table's actual primary-key column rather than a hard-coded `id`.
 ///
-/// @tparam Scheme The type representing the database table scheme.
-///                Must satisfy the `db::DbTable` concept.
-/// @return A `db::details::static_string` containing the generated SQL query string.
+/// @tparam Scheme Must satisfy @ref db::DbTable.
+/// @return A `db::details::static_string` holding the rendered SQL.
 template <::db::DbTable Scheme>
 consteval auto construct_delete_by_pk_query() noexcept {
     constexpr auto kDbName = []() {

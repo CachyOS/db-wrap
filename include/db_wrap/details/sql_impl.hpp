@@ -119,7 +119,7 @@ constexpr void interpret_name(std::string_view name, std::int32_t& i, std::int32
 /// @param dest The destination string to which the generated query
 ///             string will be appended.
 ///
-/// @example
+/// Example:
 /// struct MyScheme {
 ///   static constexpr std::string_view kName = "my_table";
 /// };
@@ -169,7 +169,7 @@ constexpr void update_query_str(auto&& dest) noexcept {
 /// @return `true` if all field names are valid members of the structure,
 ///         `false` otherwise.
 ///
-/// @example
+/// Example:
 /// struct User {
 ///   int id;
 ///   std::string name;
@@ -208,7 +208,7 @@ consteval auto validate_fields(auto&& sql_scheme_struct) noexcept -> bool {
 /// @param dest The destination string to which the generated query string
 ///             will be appended.
 ///
-/// @example
+/// Example:
 /// struct User {
 ///   static constexpr std::string_view kName = "users";
 ///   int id;
@@ -269,7 +269,7 @@ constexpr void update_query_all_str(auto&& dest) noexcept {
 /// @param dest The destination string to which the generated query string
 ///             will be appended.
 ///
-/// @example
+/// Example:
 /// struct User {
 ///   static constexpr std::string_view kName = "users";
 ///   int id;

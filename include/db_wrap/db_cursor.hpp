@@ -5,31 +5,33 @@
  */
 #pragma once
 
-// Server-side SQL cursors
-//
-// ## Quick start
-//
-// ```cpp
-// struct User {
-//   static constexpr std::string_view kName = "users";
-//   std::int64_t id;
-//   std::string  name;
-// };
-//
-// pqxx::connection cx{"postgresql://..."};
-// pqxx::work       txn{cx};
-//
-// auto cur = db::open_cursor<User>(
-//     txn,
-//     "SELECT id, name FROM users WHERE id > $1 ORDER BY id",
-//     db::cursor_options{.batch_size = 500},
-//     std::int64_t{100});
-//
-// for (const User& u : cur) {
-//     std::cout << u.id << ' ' << u.name << '\n';
-// }
-// txn.commit();
-// ```
+/// @file db_wrap/db_cursor.hpp
+/// @brief Server-side SQL cursors with an input-range interface.
+/// @ingroup db_cursor
+///
+/// ## Quick start
+///
+/// ```cpp
+/// struct User {
+///   static constexpr std::string_view kName = "users";
+///   std::int64_t id;
+///   std::string  name;
+/// };
+///
+/// pqxx::connection cx{"postgresql://..."};
+/// pqxx::work       txn{cx};
+///
+/// auto cur = db::open_cursor<User>(
+///     txn,
+///     "SELECT id, name FROM users WHERE id > $1 ORDER BY id",
+///     db::cursor_options{.batch_size = 500},
+///     std::int64_t{100});
+///
+/// for (const User& u : cur) {
+///     std::cout << u.id << ' ' << u.name << '\n';
+/// }
+/// txn.commit();
+/// ```
 
 #include <db_wrap/db_utils.hpp>
 #include <db_wrap/table_traits.hpp>
@@ -49,11 +51,13 @@
 
 namespace db {
 
+/// @ingroup db_cursor
 /// @brief Tunables for a `db::cursor`.
 ///
-/// @example
+/// ```cpp
 /// db::cursor_options opts{.batch_size = 500};
 /// auto cur = db::open_cursor<User>(txn, "SELECT * FROM users", opts);
+/// ```
 struct cursor_options {
     std::size_t batch_size = 100;
 };
@@ -89,11 +93,15 @@ inline auto cursor_name_counter() noexcept -> std::atomic_uint64_t& {
 /// @param quoted Pre-quoted SQL literals, indexed 0-based (so `$1` maps
 ///               to `quoted[0]`).
 /// @return The fully substituted SQL text.
+/// @warning Only safe when `quoted` entries come from `pqxx::work::quote`
+///          (or another libpqxx escaping primitive). Passing untrusted
+///          unquoted strings exposes the caller to SQL injection.
 ///
-/// @example
+/// ```cpp
 /// std::vector<std::string> q = {"'alice'", "42"};
 /// auto out = substitute_params("SELECT * FROM u WHERE name = $1 AND age > $2", q);
 /// // out == "SELECT * FROM u WHERE name = 'alice' AND age > 42"
+/// ```
 inline auto substitute_params(std::string_view query,
     const std::vector<std::string>& quoted) -> std::string {
     std::string result;
@@ -158,9 +166,9 @@ inline auto substitute_params(std::string_view query,
 ///   - `WITH HOLD` cursors are not supported; see `cursor_options`.
 ///
 /// @tparam Scheme The row type each fetched row is converted to. Must
-///                satisfy `db::DbTable`.
+///                satisfy @ref db::DbTable.
 ///
-/// @example
+/// ```cpp
 /// struct User {
 ///   static constexpr std::string_view kName = "users";
 ///   std::int64_t id;
@@ -178,6 +186,7 @@ inline auto substitute_params(std::string_view query,
 ///     std::cout << u.id << ' ' << u.name << '\n';
 /// }
 /// txn.commit();
+/// ```
 template <DbTable Scheme>
 class cursor {
  public:
@@ -189,10 +198,12 @@ class cursor {
     /// @param txn  The enclosing `pqxx::work`. Must outlive the cursor.
     /// @param query The SELECT statement to iterate over.
     /// @param opts Tunables (batch size, etc.). Defaults are sensible.
+    /// @throws pqxx::sql_error if the `DECLARE CURSOR` statement is rejected.
     ///
-    /// @example
+    /// ```cpp
     /// pqxx::work txn{conn};
     /// db::cursor<User> cur{txn, "SELECT * FROM users ORDER BY id"};
+    /// ```
     cursor(pqxx::work& txn, std::string_view query, cursor_options opts = {})
       : m_txn{&txn}, m_name{std::format("db_wrap_cursor_{}",
                          details::cursor_name_counter().fetch_add(1, std::memory_order_relaxed))},
@@ -215,13 +226,15 @@ class cursor {
     /// @param opts  Tunables.
     /// @param params The values to substitute. Their order corresponds
     ///               to `$1`, `$2`, ...
+    /// @throws pqxx::sql_error if the `DECLARE CURSOR` statement is rejected.
     ///
-    /// @example
+    /// ```cpp
     /// auto cur = db::open_cursor<User>(
     ///     txn,
     ///     "SELECT * FROM users WHERE id > $1 AND name LIKE $2",
     ///     db::cursor_options{.batch_size = 250},
     ///     std::int64_t{100}, std::string{"alice%"});
+    /// ```
     template <typename... Args>
         requires(sizeof...(Args) > 0)
     cursor(pqxx::work& txn, std::string_view query, cursor_options opts, Args&&... params)
@@ -276,12 +289,13 @@ class cursor {
     /// that fetch. The iterator compares equal to
     /// `std::default_sentinel_t` when the cursor is exhausted.
     ///
-    /// @example
+    /// ```cpp
     /// auto cur = db::open_cursor<User>(txn, "SELECT * FROM users");
     /// for (auto it = cur.begin(); it != cur.end(); ++it) {
     ///     const User& u = *it;
     ///     // `u` is valid until the next `++it`.
     /// }
+    /// ```
     class iterator {
      public:
         using value_type        = Scheme;
@@ -367,12 +381,14 @@ class cursor {
     ///
     /// @param n Maximum number of rows to fetch in this batch.
     /// @return The converted rows.
+    /// @throws pqxx::sql_error if the `FETCH` statement is rejected.
     ///
-    /// @example
+    /// ```cpp
     /// auto cur = db::open_cursor<User>(txn, "SELECT * FROM users ORDER BY id");
     /// while (auto batch = cur.fetch_next(1000); !batch.empty()) {
     ///     process(batch);
     /// }
+    /// ```
     auto fetch_next(std::size_t n) -> std::vector<Scheme> {
         const auto stmt  = std::format("FETCH {} FROM {}", n, m_name);
         pqxx::result raw = m_txn->exec(stmt);
@@ -412,8 +428,9 @@ class cursor {
 /// @param opts    Cursor tunables.
 /// @param args    Values for `$1`, `$2`, ...
 /// @return A ready-to-iterate `cursor<Scheme>`.
+/// @throws pqxx::sql_error if the underlying `DECLARE CURSOR` is rejected.
 ///
-/// @example
+/// ```cpp
 /// // Unparameterized. iterate the whole table.
 /// auto cur1 = db::open_cursor<User>(txn, "SELECT * FROM users");
 ///
@@ -423,6 +440,8 @@ class cursor {
 ///     "SELECT * FROM users WHERE id > $1",
 ///     db::cursor_options{.batch_size = 250},
 ///     std::int64_t{42});
+/// ```
+/// @ingroup db_cursor
 template <DbTable Scheme, typename... Args>
 auto open_cursor(pqxx::work& txn, std::string_view query,
     cursor_options opts = {}, Args&&... args) -> cursor<Scheme> {

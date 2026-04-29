@@ -98,7 +98,7 @@ constexpr void for_each_field_with_name(T&& obj, Fn&& fn) {
 /// @tparam Obj The object type being walked (usually deduced).
 /// @tparam Fn  Callable type matching `void(std::string_view, auto&)`.
 ///
-/// @example
+/// Example:
 /// struct User {
 ///     std::int64_t user_id;
 ///     std::string  full_name;  // maps to "name" in table_traits

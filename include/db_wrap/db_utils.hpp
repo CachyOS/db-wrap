@@ -5,6 +5,10 @@
  */
 #pragma once
 
+/// @file db_wrap/db_utils.hpp
+/// @brief Row-mapping and exec helpers under the `db::utils` namespace.
+/// @ingroup db_utils
+
 #include <db_wrap/details/reflect.hpp>
 #include <db_wrap/details/sql_impl.hpp>
 #include <db_wrap/details/unpack_fields_impl.hpp>
@@ -22,22 +26,24 @@
 
 namespace db::utils {
 
-/// @brief Helper function to convert a pqxx::row_ref to a user-defined type.
+/// @ingroup db_utils
+/// @brief Convert a `pqxx::row_ref` into a user struct.
 ///
-/// This function routes through the `db::reflect::*` dispatcher to
-/// iterate over the fields of the user-defined type `T` and extract
-/// the corresponding values from the `pqxx::row_ref`.
+/// Routes through the `db::reflect::*` dispatcher to walk the fields of
+/// `T` and pull each value out of the row by column name.
 ///
-/// When `T` satisfies `db::DbTable`, the column lookup uses the SQL
-/// column names produced by `db::column_of<T>`, so any
-/// `column_overrides` declared on `table_traits<T>` are applied
-/// consistently with INSERT / UPDATE emission. When `T` does not model
-/// `DbTable` (ad-hoc structs and unit tests), the lookup falls back to
-/// an identity mapping from struct member name to column name.
+/// When `T` satisfies @ref db::DbTable, the lookup uses the SQL column
+/// names produced by `db::column_of<T>`, so any `column_overrides`
+/// declared on `table_traits<T>` are applied consistently with INSERT /
+/// UPDATE emission. When `T` does not model `DbTable` (ad-hoc structs,
+/// unit tests), the lookup falls back to an identity mapping from struct
+/// member name to column name.
 ///
-/// @tparam T The type to convert the row to.
-/// @param row The pqxx::row_ref to convert.
-/// @return An object of type `T` filled with the data from the row.
+/// @tparam T Destination struct type.
+/// @param row Source row.
+/// @return A fully populated `T`.
+/// @throws pqxx::conversion_error if a column cannot be converted to the
+///         corresponding C++ field type.
 template <typename T>
 constexpr T from_row(pqxx::row_ref&& row) noexcept {
     T obj{};
@@ -59,16 +65,20 @@ constexpr T from_row(pqxx::row_ref&& row) noexcept {
     return obj;
 }
 
-/// @brief Helper function to convert a pqxx::row_ref to a user-defined type.
+/// @ingroup db_utils
+/// @brief Convert a `pqxx::row_ref` into a user struct by column index.
 ///
-/// This function utilizes Boost.PFR to iterate over the fields of the
-/// user-defined type `T` and extract the corresponding values from the
-/// `pqxx::row_ref`. It assumes that the order of fields in `T` matches the
-/// order of columns in the row.
+/// Walks the fields of `T` via Boost.PFR and pulls each value out of the
+/// row by 0-based positional index. Useful when the SQL projection order
+/// matches the struct field order exactly (e.g. `SELECT a,b,c FROM t`).
 ///
-/// @tparam T The type to convert the row to.
-/// @param row The pqxx::row_ref to convert.
-/// @return An object of type `T` filled with the data from columns.
+/// @tparam T Destination struct type.
+/// @param row Source row.
+/// @return A fully populated `T`.
+/// @warning Column ordering is implicit. If you reorder struct fields
+///          without updating the SQL, every column shifts silently.
+///          Prefer @ref from_row whenever a column name lookup is
+///          acceptable.
 template <typename T>
 constexpr T from_columns(pqxx::row_ref&& row) {
     T obj{};
@@ -78,16 +88,14 @@ constexpr T from_columns(pqxx::row_ref&& row) {
     return obj;
 }
 
-/// @brief Extracts all rows from a pqxx::result and converts them to a
-///        vector of the specified type.
+/// @ingroup db_utils
+/// @brief Materialize every row of a result into a `std::vector<T>`.
 ///
-/// This function iterates through all rows in the `pqxx::result` and uses
-/// the `from_row` function to convert each row to an object of type `T`.
-/// The converted objects are stored in a vector.
+/// Iterates the result and converts each row through @ref from_row.
 ///
-/// @tparam T The type to convert each row to.
-/// @param result The pqxx::result containing the rows.
-/// @return A vector of objects of type `T` representing the extracted rows.
+/// @tparam T Destination struct type.
+/// @param result Result set to consume. Moved-from on return.
+/// @return Vector with one element per row.
 template <typename T>
 constexpr auto extract_all_rows(pqxx::result&& result) noexcept -> std::vector<T> {
     return result
@@ -95,41 +103,22 @@ constexpr auto extract_all_rows(pqxx::result&& result) noexcept -> std::vector<T
         | std::ranges::to<std::vector<T>>();
 }
 
-/// @brief Retrieves a single row from the database and converts it to the
-///        specified type.
+/// @ingroup db_utils
+/// @brief Run a parameterized query and return the first row as `T`.
 ///
-/// This function executes the provided SQL query and retrieves the first row
-/// of the result set. It then uses the `utils::from_row` function to convert
-/// the row data into an object of the specified type `T`.
+/// Opens a `pqxx::work`, executes `query` with `args` bound to
+/// `$1`..`$N`, and converts the first row via @ref from_row. Returns
+/// `std::nullopt` if the result set is empty.
 ///
-/// @tparam T The type to convert the database row to. The type `T` must be
-///           compatible with the `utils::from_row` function, which uses
-///           Boost.PFR to perform the conversion.
-/// @tparam Args The types of the query parameters.
-/// @param conn The pqxx::connection object representing the database connection.
-/// @param query The SQL query to execute.
-/// @param args The parameters for the SQL query. The number and types of
-///             parameters must match the placeholders in the query string.
-/// @return An optional object of type `T` containing the data from the
-///         database row. Returns `std::nullopt` if no rows are found.
+/// @tparam T Destination struct type.
+/// @tparam Args Query parameter types; must be `pqxx`-bindable.
+/// @param conn Open libpqxx connection.
+/// @param query SQL with `$1`-style placeholders.
+/// @param args Values bound to the placeholders, in order.
+/// @return First row as `T`, or `std::nullopt` if no rows.
+/// @throws pqxx::sql_error on SQL execution failure.
 ///
-/// @example
-/// struct User {
-///   int id;
-///   std::string name;
-///   std::string email;
-/// };
-///
-/// // Retrieve a user with ID 1
-/// auto user = db::utils::one_row_as<User>(conn, "SELECT * FROM users WHERE id = $1", 1);
-///
-/// if (user) {
-///   std::cout << "User ID: " << user->id << std::endl;
-///   std::cout << "User Name: " << user->name << std::endl;
-///   std::cout << "User Email: " << user->email << std::endl;
-/// } else {
-///   std::cout << "User not found!" << std::endl;
-/// }
+/// @snippet example_motivating.cpp one_row_as
 template <typename T, typename... Args>
 auto one_row_as(pqxx::connection& conn, std::string_view query, Args&&... args) -> std::optional<T> {
     pqxx::work txn(conn);
@@ -143,46 +132,23 @@ auto one_row_as(pqxx::connection& conn, std::string_view query, Args&&... args) 
     return utils::from_row<T>(result[0]);
 }
 
-/// @brief Executes a query and retrieves all rows as an optional vector of the specified type.
+/// @ingroup db_utils
+/// @brief Run a parameterized query and return all rows as `std::vector<T>`.
 ///
-/// This function executes the provided SQL query, retrieves all rows from the
-/// result set, and converts each row into an object of the specified type `T`
-/// using the `utils::from_row` function. The converted objects are stored in
-/// a `std::vector`, which is then wrapped in a `std::optional`.
+/// Opens a `pqxx::work`, executes `query` with `args` bound to
+/// `$1`..`$N`, and converts every row via @ref from_row. Returns
+/// `std::nullopt` if the result set is empty (so the caller can
+/// distinguish "no rows" from "empty vector").
 ///
-/// If the query returns no rows, the function returns `std::nullopt`. Otherwise,
-/// it returns the vector of converted objects.
+/// @tparam T Destination struct type.
+/// @tparam Args Query parameter types; must be `pqxx`-bindable.
+/// @param conn Open libpqxx connection.
+/// @param query SQL with `$1`-style placeholders.
+/// @param args Values bound to the placeholders, in order.
+/// @return Vector of rows, or `std::nullopt` if no rows.
+/// @throws pqxx::sql_error on SQL execution failure.
 ///
-/// @tparam T The type to convert each database row to. This type must be
-///           compatible with the `utils::from_row` function, which uses
-///           Boost.PFR to perform the conversion.
-/// @tparam Args The types of the query parameters.
-/// @param conn The pqxx::connection object representing the database connection.
-/// @param query The SQL query to execute.
-/// @param args The parameters for the SQL query. The number and types of
-///             parameters must match the placeholders in the query string.
-/// @return A `std::optional<std::vector<T>>` containing the results of the query.
-///         If the query returns rows, the optional contains a vector of objects
-///         of type `T`, each representing a row from the result set. If the query
-///         returns no rows, the optional is empty (`std::nullopt`).
-///
-/// @example
-/// struct Product {
-///   int id;
-///   std::string name;
-///   double price;
-/// };
-///
-/// // Retrieve all products with a price greater than 10.0
-/// constexpr auto kSelectQuery = "SELECT * FROM products WHERE price > $1";
-/// auto products = db::utils::as_set_of<Product>(conn, kSelectQuery, 10.0);
-/// if (products) {
-///   for (auto&& product : *products) {
-///     std::cout << "Product: " << product.name << " (Price: " << product.price << ")" << std::endl;
-///   }
-/// } else {
-///   std::cout << "Products not found!" << std::endl;
-/// }
+/// @snippet example_sql_gen.cpp as_set_of
 template <typename T, typename... Args>
 auto as_set_of(pqxx::connection& conn, std::string_view query, Args&&... args) -> std::optional<std::vector<T>> {
     pqxx::work txn(conn);
@@ -196,25 +162,18 @@ auto as_set_of(pqxx::connection& conn, std::string_view query, Args&&... args) -
     return utils::extract_all_rows<T>(std::move(result));
 }
 
-/// @brief Executes a SQL query and returns the number of affected rows.
+/// @ingroup db_utils
+/// @brief Run a parameterized statement and return the affected-row count.
 ///
-/// This function takes a database connection (`conn`) and a SQL query string
-/// (`query`), executes the query, and returns the number of rows affected by
-/// the query. It uses a `pqxx::work` transaction to ensure that the query
-/// is executed within a transaction context.
+/// Opens a `pqxx::work`, executes `query` with `args` bound to
+/// `$1`..`$N`, commits, and returns `pqxx::result::affected_rows()`.
 ///
-/// @param conn A reference to a `pqxx::connection` object representing the
-///             database connection.
-/// @param query A `std::string_view` containing the SQL query to execute.
-/// @param args A parameter pack of arguments to be bound to the placeholders
-///             in the SQL query.
-/// @return The number of rows affected by the executed query.
-///
-/// @example
-/// // Delete all users with the name "John Doe"
-/// constexpr auto kDeleteQuery = "DELETE FROM users WHERE name = $1";
-/// auto deleted_rows = db::utils::exec_affected(conn, kDeleteQuery, "John Doe");
-/// std::cout << "Deleted " << deleted_rows << " rows." << std::endl;
+/// @tparam Args Query parameter types; must be `pqxx`-bindable.
+/// @param conn Open libpqxx connection.
+/// @param query SQL with `$1`-style placeholders.
+/// @param args Values bound to the placeholders, in order.
+/// @return Number of rows affected.
+/// @throws pqxx::sql_error on SQL execution failure.
 template <typename... Args>
 auto exec_affected(pqxx::connection& conn, std::string_view query, Args&&... args) -> std::size_t {
     pqxx::work txn(conn);
@@ -225,36 +184,21 @@ auto exec_affected(pqxx::connection& conn, std::string_view query, Args&&... arg
     return static_cast<std::size_t>(result.affected_rows());
 }
 
-/// @brief Executes a query and returns the number of affected rows,
-///        automatically unpacking the fields of a record for parameter binding.
+/// @ingroup db_utils
+/// @brief Overload that unpacks every field of `record` into the parameter pack.
 ///
-/// This function executes the provided SQL query using `exec` and
-/// returns the number of rows affected by the query. It simplifies the process
-/// of binding parameters to the query by automatically unpacking the fields of
-/// a record object using the `utils::unpack_fields` function.
+/// Convenience wrapper for INSERT/UPDATE statements whose `$1`..`$N`
+/// placeholders correspond exactly to the fields of `record` (in
+/// declaration order). The fields are extracted via
+/// `db::utils::unpack_fields` and forwarded to the variadic
+/// @ref exec_affected overload.
 ///
-/// @tparam Scheme The type representing the database table scheme. Must
-///                satisfy the `sql::details::HasName` concept.
-/// @param conn The pqxx::connection object representing the database connection.
-/// @param query The SQL query to execute. This query should contain placeholders
-///              ($1, $2, etc.) that correspond to the fields of the `record` object.
-/// @param record The object containing the data to be used as parameters for the
-///               query. The fields of this object are unpacked and passed to
-///               `exec` in the order they are defined in the structure.
-/// @return The number of rows affected by the executed query.
-///
-/// @example
-/// struct Product {
-///   static constexpr std::string_view kName = "products";
-///   int id;
-///   std::string name;
-///   double price;
-/// };
-///
-/// Product product{1, "Example Product", 19.99};
-/// constexpr auto kUpdateQuery = "UPDATE products SET name = $2, price = $3 WHERE id = $1;";
-/// std::size_t rows_affected = db::utils::exec_affected<Product>(conn, kUpdateQuery, product);
-/// std::cout << "Rows affected: " << rows_affected << std::endl;
+/// @tparam Scheme Must satisfy `sql::details::HasName`.
+/// @param conn Open libpqxx connection.
+/// @param query SQL with one `$N` placeholder per field of `Scheme`.
+/// @param record Source object whose fields become the bound parameters.
+/// @return Number of rows affected.
+/// @throws pqxx::sql_error on SQL execution failure.
 template <sql::details::HasName Scheme>
 auto exec_affected(pqxx::connection& conn, std::string_view query, const Scheme& record) -> std::size_t {
     // Unroll fields using unpack_fields
