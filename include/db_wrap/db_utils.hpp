@@ -5,8 +5,10 @@
  */
 #pragma once
 
+#include <db_wrap/details/reflect.hpp>
 #include <db_wrap/details/sql_impl.hpp>
 #include <db_wrap/details/unpack_fields_impl.hpp>
+#include <db_wrap/table_traits.hpp>
 
 #include <algorithm>    // for transform
 #include <optional>     // for optional
@@ -23,9 +25,16 @@ namespace db::utils {
 
 /// @brief Helper function to convert a pqxx::row_ref to a user-defined type.
 ///
-/// This function utilizes Boost.PFR to iterate over the fields of the
-/// user-defined type `T` and extract the corresponding values from the
-/// `pqxx::row_ref`.
+/// This function routes through the `db::reflect::*` dispatcher to
+/// iterate over the fields of the user-defined type `T` and extract
+/// the corresponding values from the `pqxx::row_ref`.
+///
+/// When `T` satisfies `db::DbTable`, the column lookup uses the SQL
+/// column names produced by `db::column_of<T>`, so any
+/// `column_overrides` declared on `table_traits<T>` are applied
+/// consistently with INSERT / UPDATE emission. When `T` does not model
+/// `DbTable` (ad-hoc structs and unit tests), the lookup falls back to
+/// an identity mapping from struct member name to column name.
 ///
 /// @tparam T The type to convert the row to.
 /// @param row The pqxx::row_ref to convert.
@@ -33,9 +42,21 @@ namespace db::utils {
 template <typename T>
 constexpr T from_row(pqxx::row_ref&& row) noexcept {
     T obj{};
-    boost::pfr::for_each_field_with_name(obj, [&](std::string_view field_name, auto& field) {
-        field = row[pqxx::zview(field_name)].as<std::decay_t<decltype(field)>>();
-    });
+    if constexpr (::db::DbTable<T>) {
+        // Route the SELECT-result extraction through the reflection
+        // dispatcher so that column overrides declared in
+        // `table_traits<T>` are applied consistently with INSERT /
+        // UPDATE emission.
+        ::db::reflect::for_each_field_with_column_name<T>(obj, [&](std::string_view column, auto& field) {
+            field = row[pqxx::zview(column)].as<std::decay_t<decltype(field)>>();
+        });
+    } else {
+        // Fallback for non-`DbTable` types (unit tests, ad-hoc structs):
+        // identity mapping from struct member name to column name.
+        ::db::reflect::for_each_field_with_name(obj, [&](std::string_view field_name, auto& field) {
+            field = row[pqxx::zview(field_name)].as<std::decay_t<decltype(field)>>();
+        });
+    }
     return obj;
 }
 
