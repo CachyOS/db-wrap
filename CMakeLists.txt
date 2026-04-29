@@ -33,6 +33,10 @@ set_project_warnings(project_warnings)
 
 target_link_libraries(db-wrap INTERFACE project_warnings project_options libpqxx::pqxx Boost::pfr)
 
+if(DB_WRAP_HAS_STD_REFLECTION)
+    target_compile_definitions(db-wrap INTERFACE DB_WRAP_HAS_STD_REFLECTION)
+endif()
+
 # unit tests
 if (DB_WRAP_ENABLE_TESTING)
   message(STATUS "DBWRAP: unit-tests enabled")

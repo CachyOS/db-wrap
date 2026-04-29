@@ -36,3 +36,9 @@ else()
        EXCLUDE_FROM_ALL YES
     )
 endif()
+
+# C++26 <meta> reflection support (P2996)
+set(DB_WRAP_HAS_STD_REFLECTION FALSE CACHE INTERNAL "")
+if(DB_WRAP_USE_STD_REFLECTION)
+    set(DB_WRAP_HAS_STD_REFLECTION TRUE CACHE INTERNAL "" FORCE)
+endif()
