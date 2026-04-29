@@ -13,7 +13,7 @@ else()
 endif()
 if(DB_WRAP_USE_EXTERNAL_PFR)
     message(STATUS "DBWRAP: using external pfr")
-    find_package(boost_pfr REQUIRED)
+    find_package(pfr REQUIRED)
 else()
     message(STATUS "DBWRAP: fetching pfr")
     CPMAddPackage(
