@@ -13,8 +13,8 @@ include("${PROJECT_SOURCE_DIR}/cmake/CPM.cmake")
 include("${PROJECT_SOURCE_DIR}/cmake/FetchDepends.cmake")
 
 # options
-add_library(project_options INTERFACE)
-target_compile_features(project_options INTERFACE cxx_std_23)
+add_library(db-wrap_project_options INTERFACE)
+target_compile_features(db-wrap_project_options INTERFACE cxx_std_23)
 
 # library targets
 add_library(db-wrap INTERFACE)
@@ -28,10 +28,10 @@ target_include_directories(
 )
 
 # enable warnings
-add_library(project_warnings INTERFACE)
-set_project_warnings(project_warnings)
+add_library(db-wrap_project_warnings INTERFACE)
+set_project_warnings(db-wrap_project_warnings)
 
-target_link_libraries(db-wrap INTERFACE project_warnings project_options libpqxx::pqxx Boost::pfr)
+target_link_libraries(db-wrap INTERFACE db-wrap_project_warnings db-wrap_project_options libpqxx::pqxx Boost::pfr)
 
 if(DB_WRAP_HAS_STD_REFLECTION)
     target_compile_definitions(db-wrap INTERFACE DB_WRAP_HAS_STD_REFLECTION)
