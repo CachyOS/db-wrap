@@ -14,7 +14,7 @@ include("${PROJECT_SOURCE_DIR}/cmake/FetchDepends.cmake")
 
 # options
 add_library(project_options INTERFACE)
-target_compile_features(project_options INTERFACE cxx_std_20)
+target_compile_features(project_options INTERFACE cxx_std_23)
 
 # library targets
 add_library(db-wrap INTERFACE)

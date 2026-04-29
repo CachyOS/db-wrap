@@ -2,7 +2,6 @@
 
 #include <db_wrap/sql_utils.hpp>
 #include <db_wrap/details/static_string.hpp>
-#include <db_wrap/details/string_utils.hpp>
 #include <db_wrap/details/pfr_utils.hpp>
 
 #include <string_view>
@@ -61,34 +60,6 @@ TEST_CASE("static_string")
   {
     static_assert(db::details::static_string("one") + db::details::static_string("two") == "onetwo"sv);
     static_assert(db::details::static_string("hello, ") + db::details::static_string("world!") == "hello, world!"sv);
-  }
-}
-
-TEST_CASE("itoa_d")
-{
-  SECTION("zero")
-  {
-    char output[10];
-    utils::itoa_d(0, output);
-    REQUIRE_EQ(std::string_view{output}, "0"sv);
-  }
-  SECTION("9")
-  {
-    char output[10];
-    utils::itoa_d(9, output);
-    REQUIRE_EQ(std::string_view{output}, "9"sv);
-  }
-  SECTION("678109823")
-  {
-    char output[10];
-    utils::itoa_d(678109823, output);
-    REQUIRE_EQ(std::string_view{output}, "678109823"sv);
-  }
-  SECTION("10m")
-  {
-    char output[10];
-    utils::itoa_d(10000000, output);
-    REQUIRE_EQ(std::string_view{output}, "10000000"sv);
   }
 }
 

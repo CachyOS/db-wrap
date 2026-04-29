@@ -35,8 +35,10 @@
 #include <db_wrap/table_traits.hpp>
 
 #include <atomic>
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <iterator>
 #include <string>
 #include <string_view>
@@ -98,15 +100,12 @@ inline auto substitute_params(std::string_view query,
     result.reserve(query.size() + 32);
     for (std::size_t i = 0; i < query.size();) {
         if (query[i] == '$' && i + 1 < query.size() && query[i + 1] >= '0' && query[i + 1] <= '9') {
-            std::size_t j   = i + 1;
-            std::size_t idx = 0;
-            while (j < query.size() && query[j] >= '0' && query[j] <= '9') {
-                idx = idx * 10 + static_cast<std::size_t>(query[j] - '0');
-                ++j;
-            }
-            if (idx >= 1 && idx <= quoted.size()) {
+            std::size_t idx           = 0;
+            const auto [next_ptr, ec] = std::from_chars(
+                query.data() + i + 1, query.data() + query.size(), idx);
+            if (ec == std::errc{} && idx >= 1 && idx <= quoted.size()) {
                 result.append(quoted[idx - 1]);
-                i = j;
+                i = static_cast<std::size_t>(next_ptr - query.data());
                 continue;
             }
         }
@@ -195,10 +194,10 @@ class cursor {
     /// pqxx::work txn{conn};
     /// db::cursor<User> cur{txn, "SELECT * FROM users ORDER BY id"};
     cursor(pqxx::work& txn, std::string_view query, cursor_options opts = {})
-      : m_txn{&txn}, m_name{"db_wrap_cursor_" + std::to_string(details::cursor_name_counter().fetch_add(1, std::memory_order_relaxed))}, m_batch{opts.batch_size} {
-        std::string stmt;
-        stmt.reserve(query.size() + m_name.size() + 32);
-        stmt.append("DECLARE ").append(m_name).append(" CURSOR FOR ").append(query);
+      : m_txn{&txn}, m_name{std::format("db_wrap_cursor_{}",
+                         details::cursor_name_counter().fetch_add(1, std::memory_order_relaxed))},
+        m_batch{opts.batch_size} {
+        const auto stmt = std::format("DECLARE {} CURSOR FOR {}", m_name, query);
         m_txn->exec(stmt);
     }
 
@@ -226,16 +225,16 @@ class cursor {
     template <typename... Args>
         requires(sizeof...(Args) > 0)
     cursor(pqxx::work& txn, std::string_view query, cursor_options opts, Args&&... params)
-      : m_txn{&txn}, m_name{"db_wrap_cursor_" + std::to_string(details::cursor_name_counter().fetch_add(1, std::memory_order_relaxed))}, m_batch{opts.batch_size} {
+      : m_txn{&txn}, m_name{std::format("db_wrap_cursor_{}",
+                         details::cursor_name_counter().fetch_add(1, std::memory_order_relaxed))},
+        m_batch{opts.batch_size} {
         std::vector<std::string> quoted;
         quoted.reserve(sizeof...(Args));
         (quoted.emplace_back(m_txn->quote(std::forward<Args>(params))), ...);
 
         const std::string substituted = details::substitute_params(query, quoted);
 
-        std::string stmt;
-        stmt.reserve(substituted.size() + m_name.size() + 32);
-        stmt.append("DECLARE ").append(m_name).append(" CURSOR FOR ").append(substituted);
+        const auto stmt = std::format("DECLARE {} CURSOR FOR {}", m_name, substituted);
         m_txn->exec(stmt);
     }
 
@@ -375,10 +374,7 @@ class cursor {
     ///     process(batch);
     /// }
     auto fetch_next(std::size_t n) -> std::vector<Scheme> {
-        std::string stmt;
-        stmt.reserve(m_name.size() + 32);
-        stmt.append("FETCH ").append(std::to_string(n)).append(" FROM ").append(m_name);
-
+        const auto stmt  = std::format("FETCH {} FROM {}", n, m_name);
         pqxx::result raw = m_txn->exec(stmt);
         return db::utils::extract_all_rows<Scheme>(std::move(raw));
     }
@@ -390,9 +386,7 @@ class cursor {
         }
         m_closed = true;
         try {
-            std::string stmt;
-            stmt.reserve(m_name.size() + 8);
-            stmt.append("CLOSE ").append(m_name);
+            const auto stmt = std::format("CLOSE {}", m_name);
             m_txn->exec(stmt);
         } catch (...) {
         }

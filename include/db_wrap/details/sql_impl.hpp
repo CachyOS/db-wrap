@@ -1,26 +1,33 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * Copyright (c) 2024 Vladislav Nepogodin <vnepogodin@cachyos.org>
+ * Copyright (c) 2024-2026 Vladislav Nepogodin <vnepogodin@cachyos.org>
  */
 #pragma once
 
 #include <db_wrap/details/pfr_utils.hpp>
 #include <db_wrap/details/static_string.hpp>
-#include <db_wrap/details/string_utils.hpp>
 #include <db_wrap/table_traits.hpp>
 
 #include <cstdint>
 
-#include <algorithm>    // for all_of, find
+#include <algorithm>    // for count_if
 #include <array>        // for array
+#include <charconv>     // for to_chars
 #include <concepts>     // for convertible_to
 #include <ranges>       // for ranges::*
 #include <string>       // for string
 #include <string_view>  // for string_view
-#include <vector>       // for vector
 
 namespace db::sql::details {
+
+/// @brief Append the base-10 representation of `value` to `dest` (which may
+/// be a `std::string` or a `db::details::static_string<N>`).
+constexpr void append_decimal(auto& dest, std::int32_t value) noexcept {
+    std::array<char, 10> buf{};
+    const auto end_ptr = std::to_chars(buf.data(), buf.data() + buf.size(), value).ptr;
+    dest += std::string_view{buf.data(), end_ptr};
+}
 
 /// @brief Concept that checks if a type has a static member `kName`
 ///        representing a database table name.
@@ -84,12 +91,9 @@ concept HasSchemeAndId = details::HasName<T> && details::HasIdField<T>;
 constexpr void interpret_name(std::string_view name, std::int32_t& i, std::int32_t max_size, auto& dest) noexcept {
     using namespace std::string_view_literals;
 
-    std::array<char, 10> buf{};
-    utils::itoa_d(i + 2, buf.data());
-
     dest += name;
     dest += " = $"sv;
-    dest += buf.data();
+    details::append_decimal(dest, i + 2);
 
     if (i + 1 < max_size) {
         dest += ", "sv;
@@ -181,14 +185,8 @@ constexpr void update_query_str(auto&& dest) noexcept {
 template <::db::details::static_string... Fields>
 consteval auto validate_fields(auto&& sql_scheme_struct) noexcept -> bool {
     constexpr auto valid_fields = utils::get_struct_names<std::remove_cvref_t<decltype(sql_scheme_struct)>>();
-    constexpr auto fields_count = sizeof...(Fields);
 
-    std::vector<std::string_view> fields_str{};
-    fields_str.reserve(fields_count);
-    (fields_str.push_back(std::string_view{Fields}), ...);
-
-    return std::ranges::all_of(fields_str,
-        [&valid_fields](auto&& field_name) { return std::ranges::find(valid_fields, field_name) != valid_fields.end(); });
+    return (std::ranges::contains(valid_fields, std::string_view{Fields}) && ...);
 }
 
 /// @brief Generates an SQL UPDATE query string to update all fields
@@ -231,27 +229,10 @@ constexpr void update_query_all_str(auto&& dest) noexcept {
     constexpr auto kStatementBegin = "UPDATE "sv;
     constexpr auto kStatementEnd   = " WHERE "sv;
 
-    constexpr auto kPrimaryKey  = std::string_view{traits::primary_key};
     constexpr auto valid_fields = utils::get_struct_names<std::remove_cvref_t<Scheme>>();
 
-    // Count the fields that will end up in the SET clause. A field is kept
-    // if its emitted column name is not the primary key and it is not in
-    // `update_exclude`. We walk through the struct names once, apply
-    // `column_of<Scheme>` to each, and count survivors.
-    constexpr std::int32_t names_size = [&]() {
-        std::int32_t count = 0;
-        for (auto&& raw_name : valid_fields) {
-            const auto column = ::db::column_of<Scheme>(raw_name);
-            if (column == kPrimaryKey) {
-                continue;
-            }
-            if (::db::is_update_excluded<Scheme>(raw_name)) {
-                continue;
-            }
-            ++count;
-        }
-        return count;
-    }();
+    constexpr std::int32_t names_size = static_cast<std::int32_t>(
+        std::ranges::count_if(valid_fields, ::db::is_in_update_set<Scheme>));
 
     std::int32_t i{};
     // clang<=18 does not support constexpr std::string constructor for std::string_view arg
@@ -259,20 +240,12 @@ constexpr void update_query_all_str(auto&& dest) noexcept {
     dest += traits::table_name;
     dest += " SET "sv;
 
-    // run for each field except the primary key (and excluded fields)
-    for (auto&& raw_name : valid_fields) {
-        const auto column = ::db::column_of<Scheme>(raw_name);
-        if (column == kPrimaryKey) {
-            continue;
-        }
-        if (::db::is_update_excluded<Scheme>(raw_name)) {
-            continue;
-        }
-        details::interpret_name(column, i, names_size, dest);
+    for (auto&& raw_name : valid_fields | std::views::filter(::db::is_in_update_set<Scheme>)) {
+        details::interpret_name(::db::column_of<Scheme>(raw_name), i, names_size, dest);
     }
 
     dest += kStatementEnd;
-    dest += kPrimaryKey;
+    dest += std::string_view{traits::primary_key};
     dest += " = $1;"sv;
 }
 
@@ -317,17 +290,8 @@ constexpr void insert_query_all_str(auto&& dest) noexcept {
     constexpr auto kStatementBegin = "INSERT INTO "sv;
     constexpr auto valid_fields    = utils::get_struct_names<std::remove_cvref_t<Scheme>>();
 
-    // includes after applying insert_exclude
-    constexpr std::int32_t names_size = [&]() {
-        std::int32_t count = 0;
-        for (auto&& raw_name : valid_fields) {
-            if (::db::is_insert_excluded<Scheme>(raw_name)) {
-                continue;
-            }
-            ++count;
-        }
-        return count;
-    }();
+    constexpr std::int32_t names_size = static_cast<std::int32_t>(
+        std::ranges::count_if(valid_fields, ::db::is_in_insert_columns<Scheme>));
 
     // generate beginning
     {
@@ -337,12 +301,7 @@ constexpr void insert_query_all_str(auto&& dest) noexcept {
         dest += traits::table_name;
         dest += " ("sv;
 
-        // run for each field
-        // TODO(vnepogodin): refactor that later
-        for (auto&& raw_name : valid_fields) {
-            if (::db::is_insert_excluded<Scheme>(raw_name)) {
-                continue;
-            }
+        for (auto&& raw_name : valid_fields | std::views::filter(::db::is_in_insert_columns<Scheme>)) {
             dest += ::db::column_of<Scheme>(raw_name);
             if (i + 1 < names_size) {
                 dest += ", "sv;
@@ -356,15 +315,10 @@ constexpr void insert_query_all_str(auto&& dest) noexcept {
     {
         dest += " ("sv;
 
-        // run for each field
-        // TODO(vnepogodin): refactor that later
-        for (auto&& field_idx : std::ranges::views::iota(0, names_size)) {
-            std::array<char, 10> buf{};
-            utils::itoa_d(field_idx + 1, buf.data());
-
+        for (auto&& field_idx : std::views::iota(1, names_size + 1)) {
             dest += "$"sv;
-            dest += buf.data();
-            if (field_idx + 1 < names_size) {
+            details::append_decimal(dest, field_idx);
+            if (field_idx < names_size) {
                 dest += ", "sv;
             }
         }

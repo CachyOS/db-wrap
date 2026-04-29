@@ -1,6 +1,6 @@
 # db-wrap: A Modern C++ Database Wrapper Library
 
-`db-wrap` is a lightweight, header-only C++20 library that simplifies database
+`db-wrap` is a lightweight, header-only C++23 library that simplifies database
 interactions using modern C++ features and concepts. It provides a generic
 interface for database operations, currently supports only (PostgreSQL) via
 the libpqxx library.
@@ -20,7 +20,7 @@ motivating example: https://www.boost.org/doc/libs/1_86_0/doc/html/boost_pfr.htm
 
 ## Requirements
 
-- C++20 compatible compiler
+- C++23 compatible compiler
 - libpqxx library (for PostgreSQL support)
 - Boost.PFR library
 

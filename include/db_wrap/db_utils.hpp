@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * Copyright (c) 2024 Vladislav Nepogodin <vnepogodin@cachyos.org>
+ * Copyright (c) 2024-2026 Vladislav Nepogodin <vnepogodin@cachyos.org>
  */
 #pragma once
 
@@ -10,7 +10,6 @@
 #include <db_wrap/details/unpack_fields_impl.hpp>
 #include <db_wrap/table_traits.hpp>
 
-#include <algorithm>    // for transform
 #include <optional>     // for optional
 #include <ranges>       // for ranges::*
 #include <string_view>  // for string_view
@@ -91,11 +90,9 @@ constexpr T from_columns(pqxx::row_ref&& row) {
 /// @return A vector of objects of type `T` representing the extracted rows.
 template <typename T>
 constexpr auto extract_all_rows(pqxx::result&& result) noexcept -> std::vector<T> {
-    std::vector<T> rows{};
-    rows.reserve(static_cast<std::size_t>(result.size()));
-    std::ranges::transform(result, std::back_inserter(rows),
-        [](auto&& row) { return utils::from_row<T>(std::move(row)); });
-    return rows;
+    return result
+        | std::views::transform([](auto&& row) { return utils::from_row<T>(std::move(row)); })
+        | std::ranges::to<std::vector<T>>();
 }
 
 /// @brief Retrieves a single row from the database and converts it to the

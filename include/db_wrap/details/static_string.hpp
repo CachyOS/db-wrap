@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * Copyright (c) 2024 Vladislav Nepogodin <vnepogodin@cachyos.org>
+ * Copyright (c) 2024-2026 Vladislav Nepogodin <vnepogodin@cachyos.org>
  */
 #pragma once
 

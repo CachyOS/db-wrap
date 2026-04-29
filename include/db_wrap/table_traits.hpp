@@ -5,9 +5,11 @@
  */
 #pragma once
 
+#include <algorithm>    // for contains, find_if
 #include <array>        // for array
 #include <concepts>     // for convertible_to
 #include <cstddef>      // for size_t
+#include <ranges>       // for ranges::*
 #include <string_view>  // for string_view
 #include <type_traits>  // for remove_cvref_t
 #include <utility>      // for declval, pair
@@ -79,7 +81,7 @@ struct table_traits;
 
 namespace details {
 
-/// @brief Legacy concept — detects the pre-traits struct contract
+/// @brief Legacy concept. Detects the pre-traits struct contract
 /// (`static T::kName` convertible to `string_view` plus a data member `id`).
 /// Used only to gate the default `table_traits` specialization.
 template <typename T>
@@ -124,39 +126,42 @@ concept DbTable = requires {
 /// `consteval` so all callers pay zero runtime cost.
 template <DbTable T>
 constexpr auto column_of(std::string_view field_name) noexcept -> std::string_view {
-    for (auto&& [from, to] : table_traits<T>::column_overrides) {
-        if (from == field_name) {
-            return to;
-        }
-    }
-    return field_name;
+    const auto& overrides = table_traits<T>::column_overrides;
+    const auto it         = std::ranges::find_if(overrides,
+        [field_name](auto&& p) { return p.first == field_name; });
+    return it != overrides.end() ? it->second : field_name;
 }
 
-/// @brief True iff `field_name` should be excluded from a generated INSERT
+/// @brief True if `field_name` should be excluded from a generated INSERT
 ///        column list for `T` (either the primary key for auto-generated PKs
-///        is NOT excluded here — that's a separate concern — this is only
-///        the user-facing `insert_exclude` trait).
+///        is NOT excluded here.
 template <DbTable T>
 constexpr auto is_insert_excluded(std::string_view field_name) noexcept -> bool {
-    for (auto&& excluded : table_traits<T>::insert_exclude) {
-        if (excluded == field_name) {
-            return true;
-        }
-    }
-    return false;
+    return std::ranges::contains(table_traits<T>::insert_exclude, field_name);
 }
 
-/// @brief True iff `field_name` should be excluded from a generated UPDATE
+/// @brief True if `field_name` should be excluded from a generated UPDATE
 ///        SET clause for `T`. The primary key is always excluded from SET
 ///        regardless of this list.
 template <DbTable T>
 constexpr auto is_update_excluded(std::string_view field_name) noexcept -> bool {
-    for (auto&& excluded : table_traits<T>::update_exclude) {
-        if (excluded == field_name) {
-            return true;
-        }
-    }
-    return false;
+    return std::ranges::contains(table_traits<T>::update_exclude, field_name);
+}
+
+/// @brief True if a struct field with member name `field_name` should be
+///        emitted in a generated UPDATE SET clause for `T`. Skips the
+///        primary-key column and anything in `update_exclude`.
+template <DbTable T>
+constexpr auto is_in_update_set(std::string_view field_name) noexcept -> bool {
+    return column_of<T>(field_name) != std::string_view{table_traits<T>::primary_key}
+    && !is_update_excluded<T>(field_name);
+}
+
+/// @brief True if a struct field with member name `field_name` should be
+///        emitted in a generated INSERT column list for `T`.
+template <DbTable T>
+constexpr auto is_in_insert_columns(std::string_view field_name) noexcept -> bool {
+    return !is_insert_excluded<T>(field_name);
 }
 
 /// @brief Compile-time index of the struct field that maps to the primary
@@ -165,7 +170,7 @@ constexpr auto is_update_excluded(std::string_view field_name) noexcept -> bool 
 /// Walks the boost::pfr field name list, applies `column_of<T>` to each,
 /// and returns the index whose mapped column name equals
 /// `table_traits<T>::primary_key`. Returns `fields_count<T>()` (i.e. one
-/// past the end) if no match is found — this is a hard compile-time error
+/// past the end) if no match is found. this is a hard compile-time error
 /// if the caller later uses the index with `boost::pfr::get<idx>`, which
 /// is the desired behavior.
 template <DbTable T>

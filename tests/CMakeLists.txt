@@ -2,7 +2,7 @@ include(CTest)
 enable_testing()
 
 add_library(doctest_main OBJECT unit.cpp)
-target_compile_features(doctest_main PUBLIC cxx_std_20)
+target_compile_features(doctest_main PUBLIC cxx_std_23)
 target_include_directories(doctest_main PRIVATE ${CMAKE_BINARY_DIR}/include ${CMAKE_CURRENT_DIR})
 target_link_libraries(doctest_main PRIVATE doctest::doctest)
 

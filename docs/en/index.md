@@ -1,4 +1,4 @@
-# Introduction to the C++20 Meta DB Library
+# Introduction to the C++23 Meta DB Library
 
 `db-wrap` is a powerful and flexible library designed to simplify and streamline database interactions in C++.
 
@@ -6,7 +6,7 @@ The library offers a high-level abstraction layer built on top of the libpqxx li
 
 ## Key Features
 
-- **Type-Safety:**  Leverages C++20 concepts and type traits to enforce compile-time checks, ensuring data integrity and reducing runtime errors.
+- **Type-Safety:**  Leverages C++23 concepts and type traits to enforce compile-time checks, ensuring data integrity and reducing runtime errors.
 - **Simplicity:** Provides convenient helper functions for common database operations, minimizing boilerplate code and improving code readability.
 - **Flexibility:** Designed with extensibility in mind, allowing for potential integration with other database libraries in the future.
 - **Boost.PFR Integration:**  Utilizes Boost.PFR for seamless conversion between database rows and user-defined data structures.
