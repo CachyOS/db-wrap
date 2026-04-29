@@ -71,6 +71,26 @@ Delete a row identified by its primary-key value (see
 db::delete_record_by_id<User>(conn, 1);
 ```
 
+## Transactions
+
+Every entry point in this module also has a `pqxx::work&` overload that
+binds to a caller-managed transaction and does **not** commit. Open one
+explicitly with `db::transaction txn{conn};` (a thin alias for
+`pqxx::work`), pass it to any number of `db::*` / `db::utils::*` calls,
+and commit once at the end:
+
+@snippet example_transactions.cpp atomic_inserts
+
+If the `transaction` is destroyed without `commit()` — for example
+because an exception unwound the scope — libpqxx aborts the in-flight
+transaction automatically:
+
+@snippet example_transactions.cpp auto_rollback
+
+The same `pqxx::work&` can be threaded through `db::open_cursor`, so
+batch reads and writes share one atomic unit of work. Savepoints /
+nested transactions (`pqxx::subtransaction`) are not yet supported.
+
 ## Lower-level helpers
 
 For workflows that need raw SQL with parameter binding rather than

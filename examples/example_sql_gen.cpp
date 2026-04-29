@@ -14,7 +14,7 @@ struct Product {
     double price;
 };
 
-inline constexpr auto kCreateTable = R"~(
+inline constexpr auto kCreateTable   = R"~(
 CREATE TEMPORARY TABLE IF NOT EXISTS products (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,

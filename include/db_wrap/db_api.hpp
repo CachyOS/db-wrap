@@ -32,6 +32,25 @@
 namespace db {
 
 /// @ingroup db_api
+/// @brief Find a record by its primary key, inside an existing transaction.
+///
+/// Same behavior as the connection overload, but binds to the caller's
+/// `pqxx::work` and does not commit.
+///
+/// @tparam Scheme Must satisfy @ref db::DbTable.
+/// @tparam IdType Primary-key C++ type. Defaults to
+///                `table_traits<Scheme>::primary_key_type`.
+/// @param txn Caller-owned transaction.
+/// @param id Primary-key value to look up.
+/// @return Matching record, or `std::nullopt` if not found.
+/// @throws pqxx::sql_error if the SELECT fails on the server.
+template <DbTable Scheme, typename IdType = typename table_traits<Scheme>::primary_key_type>
+auto find_by_id(pqxx::work& txn, IdType&& id) -> std::optional<Scheme> {
+    constexpr auto kSelectQuery = sql::utils::construct_find_by_pk_query<Scheme>();
+    return db::utils::one_row_as<Scheme>(txn, kSelectQuery, id);
+}
+
+/// @ingroup db_api
 /// @brief Find a record by its primary key.
 ///
 /// Constructs and executes a `SELECT` against
@@ -60,6 +79,22 @@ auto find_by_id(pqxx::connection& conn, IdType&& id) -> std::optional<Scheme> {
 }
 
 /// @ingroup db_api
+/// @brief Retrieve all rows from a table, inside an existing transaction.
+///
+/// Same behavior as the connection overload, but binds to the caller's
+/// `pqxx::work` and does not commit.
+///
+/// @tparam Scheme Must satisfy @ref db::DbTable.
+/// @param txn Caller-owned transaction.
+/// @return Vector of records, or `std::nullopt` for an empty result set.
+/// @throws pqxx::sql_error on SQL execution failure.
+template <DbTable Scheme>
+auto get_all_records(pqxx::work& txn) -> std::optional<std::vector<Scheme>> {
+    constexpr auto kSelectAllQuery = sql::utils::construct_select_all_query<Scheme>();
+    return db::utils::as_set_of<Scheme>(txn, kSelectAllQuery);
+}
+
+/// @ingroup db_api
 /// @brief Retrieve all rows from a table.
 ///
 /// Executes `SELECT *` against `table_traits<Scheme>::table_name` and maps
@@ -76,6 +111,23 @@ template <DbTable Scheme>
 auto get_all_records(pqxx::connection& conn) -> std::optional<std::vector<Scheme>> {
     constexpr auto kSelectAllQuery = sql::utils::construct_select_all_query<Scheme>();
     return db::utils::as_set_of<Scheme>(conn, kSelectAllQuery);
+}
+
+/// @ingroup db_api
+/// @brief Update a chosen subset of fields on a record, inside an existing
+///        transaction.
+///
+/// Same behavior as the connection overload, but binds to the caller's
+/// `pqxx::work` and does not commit.
+template <DbTable Scheme, ::db::details::static_string... Fields>
+auto update_fields(pqxx::work& txn, const Scheme& record) -> std::size_t {
+    static_assert(sql::details::validate_fields<Fields...>(Scheme{}), "non existent field detected!");
+
+    constexpr auto kUpdateQuery = sql::utils::create_update_query<Scheme, Fields...>();
+    constexpr auto kPkIdx       = ::db::get_pk_field_idx<Scheme>();
+    return db::utils::exec_affected(txn, kUpdateQuery,
+        boost::pfr::get<kPkIdx>(record),
+        db::utils::get_field_by_name<Fields>(record)...);
 }
 
 /// @ingroup db_api
@@ -106,13 +158,21 @@ auto get_all_records(pqxx::connection& conn) -> std::optional<std::vector<Scheme
 /// ```
 template <DbTable Scheme, ::db::details::static_string... Fields>
 auto update_fields(pqxx::connection& conn, const Scheme& record) -> std::size_t {
-    static_assert(sql::details::validate_fields<Fields...>(Scheme{}), "non existent field detected!");
+    pqxx::work txn(conn);
+    const auto affected = db::update_fields<Scheme, Fields...>(txn, record);
+    txn.commit();
+    return affected;
+}
 
-    constexpr auto kUpdateQuery = sql::utils::create_update_query<Scheme, Fields...>();
-    constexpr auto kPkIdx       = ::db::get_pk_field_idx<Scheme>();
-    return db::utils::exec_affected(conn, kUpdateQuery,
-        boost::pfr::get<kPkIdx>(record),
-        db::utils::get_field_by_name<Fields>(record)...);
+/// @ingroup db_api
+/// @brief Delete a record by its primary key, inside an existing transaction.
+///
+/// Same behavior as the connection overload, but binds to the caller's
+/// `pqxx::work` and does not commit.
+template <DbTable Scheme, typename IdType = typename table_traits<Scheme>::primary_key_type>
+auto delete_record_by_id(pqxx::work& txn, IdType&& id) -> std::size_t {
+    constexpr auto kDeleteQuery = sql::utils::construct_delete_by_pk_query<Scheme>();
+    return db::utils::exec_affected(txn, kDeleteQuery, id);
 }
 
 /// @ingroup db_api
@@ -136,6 +196,18 @@ auto delete_record_by_id(pqxx::connection& conn, IdType&& id) -> std::size_t {
 }
 
 /// @ingroup db_api
+/// @brief Update every field of a record except the primary key, inside
+///        an existing transaction.
+///
+/// Same behavior as the connection overload, but binds to the caller's
+/// `pqxx::work` and does not commit.
+template <DbTable Scheme>
+auto update_record(pqxx::work& txn, const Scheme& record) -> std::size_t {
+    constexpr auto kUpdateAllQuery = sql::utils::create_update_all_query<Scheme>();
+    return db::utils::exec_affected<Scheme>(txn, kUpdateAllQuery, record);
+}
+
+/// @ingroup db_api
 /// @brief Update every field of a record except the primary key.
 ///
 /// Builds an `UPDATE` statement that sets all eligible columns at once,
@@ -154,6 +226,17 @@ template <DbTable Scheme>
 auto update_record(pqxx::connection& conn, const Scheme& record) -> std::size_t {
     constexpr auto kUpdateAllQuery = sql::utils::create_update_all_query<Scheme>();
     return db::utils::exec_affected<Scheme>(conn, kUpdateAllQuery, record);
+}
+
+/// @ingroup db_api
+/// @brief Insert a new record into a table, inside an existing transaction.
+///
+/// Same behavior as the connection overload, but binds to the caller's
+/// `pqxx::work` and does not commit.
+template <DbTable Scheme>
+auto insert_record(pqxx::work& txn, const Scheme& record) -> std::size_t {
+    constexpr auto kInsertAllQuery = sql::utils::create_insert_all_query<Scheme>();
+    return db::utils::exec_affected<Scheme>(txn, kInsertAllQuery, record);
 }
 
 /// @ingroup db_api

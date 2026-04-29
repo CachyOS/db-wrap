@@ -2,10 +2,13 @@
 
 #include <db_wrap/db_utils.hpp>
 #include <db_wrap/db_api.hpp>
+#include <db_wrap/db_cursor.hpp>
+#include <db_wrap/db_transaction.hpp>
 
 #include <string_view>
 #include <ranges>
 #include <algorithm>
+#include <stdexcept>
 
 using namespace std::string_view_literals;
 
@@ -398,6 +401,144 @@ TEST_CASE("db api")
     REQUIRE_EQ(users_vec[3].email, new_user.email);
 
     // drop testing data
+    REQUIRE(drop_scheme_data(cx));
+  }
+}
+
+TEST_CASE("db transactions")
+{
+  SECTION("atomic multi-insert via one txn becomes visible only after commit")
+  {
+    pqxx::connection cx(CONNECTION_URL.data());
+    REQUIRE_EQ(cx.is_open(), true);
+    REQUIRE(execute_query(cx, kCreateTable));
+
+    auto u1 = UserScheme{.id = 10, .name = "txn-a", .email = "a@example.com"};
+    auto u2 = UserScheme{.id = 11, .name = "txn-b", .email = std::nullopt};
+
+    {
+      db::transaction txn{cx};
+      REQUIRE_EQ(db::insert_record(txn, u1), 1);
+      REQUIRE_EQ(db::insert_record(txn, u2), 1);
+
+      // Visibility from another connection: nothing committed yet.
+      pqxx::connection observer(CONNECTION_URL.data());
+      auto seen_before = db::get_all_records<UserScheme>(observer);
+      REQUIRE_EQ(seen_before, std::nullopt);
+
+      txn.commit();
+    }
+
+    auto seen_after = db::get_all_records<UserScheme>(cx);
+    REQUIRE_EQ(seen_after.has_value(), true);
+    REQUIRE_EQ(seen_after->size(), 2);
+
+    REQUIRE(drop_scheme_data(cx));
+  }
+
+  SECTION("transaction destroyed without commit rolls back")
+  {
+    pqxx::connection cx(CONNECTION_URL.data());
+    REQUIRE_EQ(cx.is_open(), true);
+    REQUIRE(execute_query(cx, kCreateTable));
+
+    auto u = UserScheme{.id = 20, .name = "rollback-me", .email = "x@y"};
+    {
+      db::transaction txn{cx};
+      REQUIRE_EQ(db::insert_record(txn, u), 1);
+    }
+
+    auto rows = db::get_all_records<UserScheme>(cx);
+    REQUIRE_EQ(rows, std::nullopt);
+
+    REQUIRE(drop_scheme_data(cx));
+  }
+
+  SECTION("exception inside transaction scope auto-aborts")
+  {
+    pqxx::connection cx(CONNECTION_URL.data());
+    REQUIRE_EQ(cx.is_open(), true);
+    REQUIRE(execute_query(cx, kCreateTable));
+
+    auto u = UserScheme{.id = 30, .name = "throw-mid-txn", .email = std::nullopt};
+
+    bool caught = false;
+    try {
+      db::transaction txn{cx};
+      REQUIRE_EQ(db::insert_record(txn, u), 1);
+      throw std::runtime_error("simulated failure");
+    } catch (const std::runtime_error&) {
+      caught = true;
+    }
+    REQUIRE_EQ(caught, true);
+
+    auto rows = db::get_all_records<UserScheme>(cx);
+    REQUIRE_EQ(rows, std::nullopt);
+
+    REQUIRE(drop_scheme_data(cx));
+  }
+
+  SECTION("mixed CRUD + cursor in a single transaction")
+  {
+    pqxx::connection cx(CONNECTION_URL.data());
+    REQUIRE_EQ(cx.is_open(), true);
+    REQUIRE(setup_scheme_data(cx));
+
+    {
+      db::transaction txn{cx};
+
+      // insert one more row inside the transaction
+      auto u = UserScheme{.id = 4, .name = "user4", .email = "user4@example.com"};
+      REQUIRE_EQ(db::insert_record(txn, u), 1);
+
+      // iterate everything (including the just-inserted row) via cursor
+      auto cur = db::open_cursor<UserScheme>(txn,
+          "SELECT * FROM __pgtest.users ORDER BY id");
+      std::vector<UserScheme> seen;
+      for (const auto& row : cur) {
+        seen.push_back(row);
+      }
+      REQUIRE_EQ(seen.size(), 4);
+
+      // patch a field on row 2 in the same txn
+      auto patched = UserScheme{.id = 2, .email = "user2@example.com"};
+      REQUIRE_EQ((db::update_fields<UserScheme, "email">(txn, patched)), 1);
+
+      // and verify the find within the same txn sees the patch
+      auto found = db::find_by_id<UserScheme>(txn, 2);
+      REQUIRE_EQ(found.has_value(), true);
+      REQUIRE_EQ(found->email, "user2@example.com");
+
+      txn.commit();
+    }
+
+    auto final_rows = db::get_all_records<UserScheme>(cx);
+    REQUIRE_EQ(final_rows.has_value(), true);
+    REQUIRE_EQ(final_rows->size(), 4);
+
+    REQUIRE(drop_scheme_data(cx));
+  }
+
+  SECTION("utils overloads taking pqxx::work& do not commit")
+  {
+    pqxx::connection cx(CONNECTION_URL.data());
+    REQUIRE_EQ(cx.is_open(), true);
+    REQUIRE(execute_query(cx, kCreateTable));
+
+    {
+      db::transaction txn{cx};
+      auto u = UserScheme{.id = 40, .name = "utils-work", .email = "u@w"};
+      REQUIRE_EQ((db::utils::exec_affected<UserScheme>(txn, kTestInsertUser, u)), 1);
+
+      auto fetched = db::utils::one_row_as<UserScheme>(
+          txn, "SELECT * FROM __pgtest.users WHERE id = $1", 40);
+      REQUIRE_EQ(fetched.has_value(), true);
+      REQUIRE_EQ(fetched->name, "utils-work");
+    }
+
+    auto rows = db::get_all_records<UserScheme>(cx);
+    REQUIRE_EQ(rows, std::nullopt);
+
     REQUIRE(drop_scheme_data(cx));
   }
 }

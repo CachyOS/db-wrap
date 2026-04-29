@@ -25,8 +25,7 @@ auto retrieve_friend(pqxx::connection& conn, std::string_view name) -> UserInfo 
     auto info = db::utils::one_row_as<UserInfo>(
         conn,
         "SELECT id, name, email, login FROM user_infos WHERE name = $1",
-        name
-    );
+        name);
     //! [one_row_as]
 
     if (!info.has_value()) {
@@ -39,9 +38,9 @@ auto retrieve_friend(pqxx::connection& conn, std::string_view name) -> UserInfo 
     return friend_info;
 }
 
-} // namespace
+}  // namespace
 
-inline constexpr auto kCreateTable = R"~(
+inline constexpr auto kCreateTable   = R"~(
 CREATE TEMPORARY TABLE IF NOT EXISTS user_infos (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,

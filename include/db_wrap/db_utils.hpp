@@ -104,11 +104,34 @@ constexpr auto extract_all_rows(pqxx::result&& result) noexcept -> std::vector<T
 }
 
 /// @ingroup db_utils
+/// @brief Run a parameterized query inside an existing transaction.
+///
+/// Executes `query` with `args` bound to `$1`..`$N` against the caller's
+/// `pqxx::work` and converts the first row via @ref from_row. Does not
+/// commit the transaction; the caller controls commit/rollback.
+///
+/// @tparam T Destination struct type.
+/// @tparam Args Query parameter types; must be `pqxx`-bindable.
+/// @param txn Caller-owned transaction.
+/// @param query SQL with `$1`-style placeholders.
+/// @param args Values bound to the placeholders, in order.
+/// @return First row as `T`, or `std::nullopt` if no rows.
+/// @throws pqxx::sql_error on SQL execution failure.
+template <typename T, typename... Args>
+auto one_row_as(pqxx::work& txn, std::string_view query, Args&&... args) -> std::optional<T> {
+    pqxx::result result = txn.exec(query.data(), pqxx::params(std::forward<Args>(args)...));
+    if (result.empty()) {
+        return std::nullopt;
+    }
+    return utils::from_row<T>(result[0]);
+}
+
+/// @ingroup db_utils
 /// @brief Run a parameterized query and return the first row as `T`.
 ///
-/// Opens a `pqxx::work`, executes `query` with `args` bound to
-/// `$1`..`$N`, and converts the first row via @ref from_row. Returns
-/// `std::nullopt` if the result set is empty.
+/// Opens a `pqxx::work`, delegates to the transaction-based overload,
+/// commits, and returns. Returns `std::nullopt` if the result set is
+/// empty.
 ///
 /// @tparam T Destination struct type.
 /// @tparam Args Query parameter types; must be `pqxx`-bindable.
@@ -122,23 +145,43 @@ constexpr auto extract_all_rows(pqxx::result&& result) noexcept -> std::vector<T
 template <typename T, typename... Args>
 auto one_row_as(pqxx::connection& conn, std::string_view query, Args&&... args) -> std::optional<T> {
     pqxx::work txn(conn);
-    pqxx::result result = txn.exec(query.data(), pqxx::params(std::forward<Args>(args)...));
+    auto out = utils::one_row_as<T>(txn, query, std::forward<Args>(args)...);
+    txn.commit();
+    return out;
+}
 
+/// @ingroup db_utils
+/// @brief Run a parameterized query inside an existing transaction and
+///        return all rows as `std::vector<T>`.
+///
+/// Executes `query` with `args` bound to `$1`..`$N` against the caller's
+/// `pqxx::work` and converts every row via @ref from_row. Returns
+/// `std::nullopt` if the result set is empty (so the caller can
+/// distinguish "no rows" from "empty vector"). Does not commit; the
+/// caller controls commit/rollback.
+///
+/// @tparam T Destination struct type.
+/// @tparam Args Query parameter types; must be `pqxx`-bindable.
+/// @param txn Caller-owned transaction.
+/// @param query SQL with `$1`-style placeholders.
+/// @param args Values bound to the placeholders, in order.
+/// @return Vector of rows, or `std::nullopt` if no rows.
+/// @throws pqxx::sql_error on SQL execution failure.
+template <typename T, typename... Args>
+auto as_set_of(pqxx::work& txn, std::string_view query, Args&&... args) -> std::optional<std::vector<T>> {
+    pqxx::result result = txn.exec(query.data(), pqxx::params(std::forward<Args>(args)...));
     if (result.empty()) {
         return std::nullopt;
     }
-    // end our transaction and return
-    txn.commit();
-    return utils::from_row<T>(result[0]);
+    return utils::extract_all_rows<T>(std::move(result));
 }
 
 /// @ingroup db_utils
 /// @brief Run a parameterized query and return all rows as `std::vector<T>`.
 ///
-/// Opens a `pqxx::work`, executes `query` with `args` bound to
-/// `$1`..`$N`, and converts every row via @ref from_row. Returns
-/// `std::nullopt` if the result set is empty (so the caller can
-/// distinguish "no rows" from "empty vector").
+/// Opens a `pqxx::work`, delegates to the transaction-based overload,
+/// commits, and returns. `std::nullopt` is returned if the result set is
+/// empty.
 ///
 /// @tparam T Destination struct type.
 /// @tparam Args Query parameter types; must be `pqxx`-bindable.
@@ -152,21 +195,35 @@ auto one_row_as(pqxx::connection& conn, std::string_view query, Args&&... args) 
 template <typename T, typename... Args>
 auto as_set_of(pqxx::connection& conn, std::string_view query, Args&&... args) -> std::optional<std::vector<T>> {
     pqxx::work txn(conn);
-    pqxx::result result = txn.exec(query.data(), pqxx::params(std::forward<Args>(args)...));
-
-    if (result.empty()) {
-        return std::nullopt;
-    }
-    // end our transaction and return
+    auto out = utils::as_set_of<T>(txn, query, std::forward<Args>(args)...);
     txn.commit();
-    return utils::extract_all_rows<T>(std::move(result));
+    return out;
+}
+
+/// @ingroup db_utils
+/// @brief Run a parameterized statement inside an existing transaction
+///        and return the affected-row count.
+///
+/// Executes `query` with `args` bound to `$1`..`$N` against the caller's
+/// `pqxx::work`. Does not commit; the caller controls commit/rollback.
+///
+/// @tparam Args Query parameter types; must be `pqxx`-bindable.
+/// @param txn Caller-owned transaction.
+/// @param query SQL with `$1`-style placeholders.
+/// @param args Values bound to the placeholders, in order.
+/// @return Number of rows affected.
+/// @throws pqxx::sql_error on SQL execution failure.
+template <typename... Args>
+auto exec_affected(pqxx::work& txn, std::string_view query, Args&&... args) -> std::size_t {
+    pqxx::result result = txn.exec(query.data(), pqxx::params(std::forward<Args>(args)...));
+    return static_cast<std::size_t>(result.affected_rows());
 }
 
 /// @ingroup db_utils
 /// @brief Run a parameterized statement and return the affected-row count.
 ///
-/// Opens a `pqxx::work`, executes `query` with `args` bound to
-/// `$1`..`$N`, commits, and returns `pqxx::result::affected_rows()`.
+/// Opens a `pqxx::work`, delegates to the transaction-based overload,
+/// commits, and returns `pqxx::result::affected_rows()`.
 ///
 /// @tparam Args Query parameter types; must be `pqxx`-bindable.
 /// @param conn Open libpqxx connection.
@@ -177,15 +234,38 @@ auto as_set_of(pqxx::connection& conn, std::string_view query, Args&&... args) -
 template <typename... Args>
 auto exec_affected(pqxx::connection& conn, std::string_view query, Args&&... args) -> std::size_t {
     pqxx::work txn(conn);
-    pqxx::result result = txn.exec(query.data(), pqxx::params(std::forward<Args>(args)...));
-
-    // end our transaction and return
+    const auto affected = utils::exec_affected(txn, query, std::forward<Args>(args)...);
     txn.commit();
-    return static_cast<std::size_t>(result.affected_rows());
+    return affected;
 }
 
 /// @ingroup db_utils
-/// @brief Overload that unpacks every field of `record` into the parameter pack.
+/// @brief Transaction overload that unpacks every field of `record` into
+///        the parameter pack.
+///
+/// Convenience wrapper for INSERT/UPDATE statements whose `$1`..`$N`
+/// placeholders correspond exactly to the fields of `record` (in
+/// declaration order). The fields are extracted via
+/// `db::utils::unpack_fields` and forwarded to the variadic
+/// @ref exec_affected overload taking `pqxx::work&`.
+///
+/// @tparam Scheme Must satisfy `sql::details::HasName`.
+/// @param txn Caller-owned transaction.
+/// @param query SQL with one `$N` placeholder per field of `Scheme`.
+/// @param record Source object whose fields become the bound parameters.
+/// @return Number of rows affected.
+/// @throws pqxx::sql_error on SQL execution failure.
+template <sql::details::HasName Scheme>
+auto exec_affected(pqxx::work& txn, std::string_view query, const Scheme& record) -> std::size_t {
+    auto&& unroll_func = [&txn, &query](const auto&... fields) {
+        return db::utils::exec_affected(txn, query, fields...);
+    };
+    return db::utils::unpack_fields(std::move(unroll_func), record);
+}
+
+/// @ingroup db_utils
+/// @brief Connection overload that unpacks every field of `record` into
+///        the parameter pack.
 ///
 /// Convenience wrapper for INSERT/UPDATE statements whose `$1`..`$N`
 /// placeholders correspond exactly to the fields of `record` (in
@@ -201,11 +281,10 @@ auto exec_affected(pqxx::connection& conn, std::string_view query, Args&&... arg
 /// @throws pqxx::sql_error on SQL execution failure.
 template <sql::details::HasName Scheme>
 auto exec_affected(pqxx::connection& conn, std::string_view query, const Scheme& record) -> std::size_t {
-    // Unroll fields using unpack_fields
-    auto&& unroll_func = [&conn, &query, &record](const auto&... fields) {
-        return db::utils::exec_affected(conn, query, fields...);
-    };
-    return db::utils::unpack_fields(std::move(unroll_func), record);
+    pqxx::work txn(conn);
+    const auto affected = utils::exec_affected<Scheme>(txn, query, record);
+    txn.commit();
+    return affected;
 }
 
 }  // namespace db::utils
