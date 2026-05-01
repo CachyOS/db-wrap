@@ -1,20 +1,71 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * Copyright (c) 2024 Vladislav Nepogodin <vnepogodin@cachyos.org>
+ * Copyright (c) 2024-2026 Vladislav Nepogodin <vnepogodin@cachyos.org>
  */
 #pragma once
 
+#include <db_wrap/details/backend_detect.hpp>
 #include <db_wrap/details/static_string.hpp>
 
 #include <algorithm>    // for find
 #include <iterator>     // for distance
 #include <type_traits>  // for remove_cvref_t
 
+#if DB_WRAP_REFLECT_BACKEND_STD
+#include <array>
+#include <meta>
+#include <string_view>
+#else
 #include <boost/pfr/core.hpp>
 #include <boost/pfr/core_name.hpp>
+#endif
 
 namespace db::utils {
+
+#if DB_WRAP_REFLECT_BACKEND_STD
+
+template <typename T>
+consteval auto get_struct_names() noexcept {
+    auto members = std::meta::nonstatic_data_members_of(^^std::remove_cvref_t<T>,
+                       std::meta::access_context::unchecked());
+
+    std::array<std::string_view, std::meta::nonstatic_data_members_of(^^std::remove_cvref_t<T>,
+                   std::meta::access_context::unchecked()).size()> out{};
+    for (std::size_t i = 0; i < out.size(); ++i) {
+        out[i] = std::meta::identifier_of(members[i]);
+    }
+    return out;
+}
+
+template <typename T>
+consteval auto get_fields_count() noexcept -> std::size_t {
+    return std::meta::nonstatic_data_members_of(^^std::remove_cvref_t<T>,
+               std::meta::access_context::unchecked()).size();
+}
+
+template <db::details::static_string field_name, typename T>
+consteval auto get_field_idx_by_name() noexcept -> std::size_t {
+    constexpr auto struct_fields = utils::get_struct_names<std::remove_cvref_t<T>>();
+    return std::distance(struct_fields.begin(), std::find(struct_fields.begin(), struct_fields.end(), field_name));
+}
+
+template <std::size_t idx>
+constexpr auto get_field_by_idx(auto&& val) noexcept {
+    using T = std::remove_cvref_t<decltype(val)>;
+    static constexpr auto members = std::define_static_array(
+        std::meta::nonstatic_data_members_of(^^T,
+            std::meta::access_context::unchecked()));
+    return val.[:members[idx]:];
+}
+
+template <db::details::static_string field_name>
+constexpr auto get_field_by_name(auto&& val) noexcept {
+    constexpr auto field_idx = utils::get_field_idx_by_name<field_name, std::remove_cvref_t<decltype(val)>>();
+    return utils::get_field_by_idx<field_idx>(val);
+}
+
+#else
 
 /// @brief Retrieves the names of the members of a structure as a
 ///        `boost::pfr::flat_names_array`.
@@ -88,5 +139,7 @@ constexpr auto get_field_by_name(auto&& val) noexcept {
     constexpr auto field_idx = utils::get_field_idx_by_name<field_name, std::remove_cvref_t<decltype(val)>>();
     return utils::get_field_by_idx<field_idx>(val);
 }
+
+#endif
 
 }  // namespace db::utils

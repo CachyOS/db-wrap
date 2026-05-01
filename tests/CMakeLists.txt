@@ -18,7 +18,10 @@ foreach(file ${files})
         $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-deprecated;-Wno-float-equal>
         $<$<CXX_COMPILER_ID:GNU>:-Wno-deprecated-declarations>
     )
-    target_link_libraries(${testcase} PRIVATE db-wrap::db-wrap libpqxx::pqxx Boost::pfr doctest::doctest)
+    target_link_libraries(${testcase} PRIVATE db-wrap::db-wrap libpqxx::pqxx doctest::doctest)
+    if(NOT DB_WRAP_HAS_STD_REFLECTION)
+        target_link_libraries(${testcase} PRIVATE Boost::pfr)
+    endif()
 
     add_test(NAME "${testcase}"
         COMMAND ${testcase} ${DOCTEST_TEST_FILTER} --no-skip

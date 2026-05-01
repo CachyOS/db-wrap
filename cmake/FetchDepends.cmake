@@ -11,6 +11,7 @@ else()
       EXCLUDE_FROM_ALL YES
     )
 endif()
+if(NOT DB_WRAP_HAS_STD_REFLECTION)
 if(DB_WRAP_USE_EXTERNAL_PFR)
     message(STATUS "DBWRAP: using external pfr")
     find_package(pfr REQUIRED)
@@ -23,6 +24,7 @@ else()
       GIT_TAG db9451143a70cbd30ce5a72f4aa294d73c17b7ab
       EXCLUDE_FROM_ALL YES
     )
+endif()
 endif()
 
 # fetch doctest only with testing

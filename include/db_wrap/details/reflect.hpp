@@ -5,17 +5,16 @@
  */
 #pragma once
 
+#include <db_wrap/details/backend_detect.hpp>
 #include <db_wrap/details/pfr_utils.hpp>
 #include <db_wrap/table_traits.hpp>
 
 #include <string_view>
 #include <type_traits>
 
-#if defined(DB_WRAP_HAS_STD_REFLECTION) && __has_include(<meta>) && (defined(__cpp_lib_reflection) || defined(__cpp_impl_reflection))
+#if DB_WRAP_REFLECT_BACKEND_STD
 #include <meta>
-#define DB_WRAP_REFLECT_BACKEND_STD 1
 #else
-#define DB_WRAP_REFLECT_BACKEND_STD 0
 #include <boost/pfr/core.hpp>
 #include <boost/pfr/core_name.hpp>
 #endif

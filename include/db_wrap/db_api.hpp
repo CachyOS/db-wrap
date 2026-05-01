@@ -16,8 +16,6 @@
 
 #include <optional>  // for optional
 
-#include <boost/pfr/core.hpp>
-
 #include <pqxx/pqxx>
 
 /// @example example_basic.cpp
@@ -126,7 +124,7 @@ auto update_fields(pqxx::work& txn, const Scheme& record) -> std::size_t {
     constexpr auto kUpdateQuery = sql::utils::create_update_query<Scheme, Fields...>();
     constexpr auto kPkIdx       = ::db::get_pk_field_idx<Scheme>();
     return db::utils::exec_affected(txn, kUpdateQuery,
-        boost::pfr::get<kPkIdx>(record),
+        db::utils::get_field_by_idx<kPkIdx>(record),
         db::utils::get_field_by_name<Fields>(record)...);
 }
 

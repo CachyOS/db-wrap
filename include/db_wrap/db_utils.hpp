@@ -14,13 +14,17 @@
 #include <db_wrap/details/unpack_fields_impl.hpp>
 #include <db_wrap/table_traits.hpp>
 
+#include <db_wrap/details/backend_detect.hpp>
+
 #include <optional>     // for optional
 #include <ranges>       // for ranges::*
 #include <string_view>  // for string_view
 #include <vector>       // for vector
 
+#if !DB_WRAP_REFLECT_BACKEND_STD
 #include <boost/pfr/core.hpp>
 #include <boost/pfr/core_name.hpp>
+#endif
 
 #include <pqxx/pqxx>
 
@@ -68,9 +72,9 @@ constexpr T from_row(pqxx::row_ref&& row) noexcept {
 /// @ingroup db_utils
 /// @brief Convert a `pqxx::row_ref` into a user struct by column index.
 ///
-/// Walks the fields of `T` via Boost.PFR and pulls each value out of the
-/// row by 0-based positional index. Useful when the SQL projection order
-/// matches the struct field order exactly (e.g. `SELECT a,b,c FROM t`).
+/// Walks the fields of `T` and pulls each value out of the row by 0-based
+/// positional index. Useful when the SQL projection order matches the
+/// struct field order exactly (e.g. `SELECT a,b,c FROM t`).
 ///
 /// @tparam T Destination struct type.
 /// @param row Source row.
@@ -82,9 +86,21 @@ constexpr T from_row(pqxx::row_ref&& row) noexcept {
 template <typename T>
 constexpr T from_columns(pqxx::row_ref&& row) {
     T obj{};
+#if DB_WRAP_REFLECT_BACKEND_STD
+    std::size_t index = 0;
+    using U = std::remove_cvref_t<T>;
+    static constexpr auto members = std::define_static_array(
+        std::meta::nonstatic_data_members_of(^^U,
+            std::meta::access_context::unchecked()));
+    template for (constexpr auto member : members) {
+        obj.[:member:] = row[static_cast<pqxx::row_ref::size_type>(index)].as<std::decay_t<decltype(obj.[:member:])>>();
+        ++index;
+    }
+#else
     boost::pfr::for_each_field(obj, [&](auto& field, std::size_t index) {
         field = row[static_cast<pqxx::row_ref::size_type>(index)].as<std::decay_t<decltype(field)>>();
     });
+#endif
     return obj;
 }
 

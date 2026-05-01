@@ -31,7 +31,10 @@ target_include_directories(
 add_library(db-wrap_project_warnings INTERFACE)
 set_project_warnings(db-wrap_project_warnings)
 
-target_link_libraries(db-wrap INTERFACE db-wrap_project_warnings db-wrap_project_options libpqxx::pqxx Boost::pfr)
+target_link_libraries(db-wrap INTERFACE db-wrap_project_warnings db-wrap_project_options libpqxx::pqxx)
+if(NOT DB_WRAP_HAS_STD_REFLECTION)
+    target_link_libraries(db-wrap INTERFACE Boost::pfr)
+endif()
 
 if(DB_WRAP_HAS_STD_REFLECTION)
     target_compile_definitions(db-wrap INTERFACE DB_WRAP_HAS_STD_REFLECTION)

@@ -18,7 +18,11 @@
 #include <type_traits>  // for remove_cvref_t
 #include <utility>      // for declval, pair
 
-#include <boost/pfr/core_name.hpp>
+// Forward-declare the pfr_utils helper used by get_pk_field_idx below.
+namespace db::utils {
+template <typename T>
+consteval auto get_struct_names() noexcept;
+}  // namespace db::utils
 
 namespace db {
 
@@ -176,15 +180,14 @@ constexpr auto is_in_insert_columns(std::string_view field_name) noexcept -> boo
 /// @brief Compile-time index of the struct field that maps to the primary
 ///        key column under `table_traits<T>::column_overrides`.
 ///
-/// Walks the boost::pfr field name list, applies `column_of<T>` to each,
+/// Walks the field name list, applies `column_of<T>` to each,
 /// and returns the index whose mapped column name equals
-/// `table_traits<T>::primary_key`. Returns `fields_count<T>()` (i.e. one
-/// past the end) if no match is found. this is a hard compile-time error
-/// if the caller later uses the index with `boost::pfr::get<idx>`, which
-/// is the desired behavior.
+/// `table_traits<T>::primary_key`. Returns the field count (i.e. one
+/// past the end) if no match is found, a hard compile-time error
+/// if the caller later uses the index for field access.
 template <DbTable T>
 consteval auto get_pk_field_idx() noexcept -> std::size_t {
-    constexpr auto names = boost::pfr::names_as_array<std::remove_cvref_t<T>>();
+    constexpr auto names = ::db::utils::get_struct_names<std::remove_cvref_t<T>>();
     constexpr auto kPk   = std::string_view{table_traits<T>::primary_key};
     for (std::size_t i = 0; i < names.size(); ++i) {
         if (column_of<T>(names[i]) == kPk) {
