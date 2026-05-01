@@ -28,34 +28,36 @@ namespace db::reflect {
 ///        compile time via `std::meta`.
 template <typename T>
 consteval auto fields_count() noexcept -> std::size_t {
-    return std::meta::nonstatic_data_members_of(^^std::remove_cvref_t<T>).size();
+    return std::meta::nonstatic_data_members_of(^^std::remove_cvref_t<T>,
+               std::meta::access_context::unchecked()).size();
 }
 
 /// @brief Array of field names of `T`, as `std::string_view`s.
 template <typename T>
 consteval auto field_names() noexcept {
-    constexpr auto members = std::meta::nonstatic_data_members_of(^^std::remove_cvref_t<T>);
-    constexpr auto N       = members.size();
+    auto members = std::meta::nonstatic_data_members_of(^^std::remove_cvref_t<T>,
+                       std::meta::access_context::unchecked());
 
-    std::array<std::string_view, N> out{};
-    for (std::size_t i = 0; i < N; ++i) {
+    std::array<std::string_view, fields_count<T>()> out{};
+    for (std::size_t i = 0; i < out.size(); ++i) {
         out[i] = std::meta::identifier_of(members[i]);
     }
     return out;
 }
 
 /// @brief Invoke `fn(field_name, field_ref)` for each non-static data
-///        member of `obj`.
+///        member of `obj`, using P3491R3 define_static_array +
+///        P1306R5 expansion statements.
 template <typename T, typename Fn>
 constexpr void for_each_field_with_name(T&& obj, Fn&& fn) {
-    using U                = std::remove_cvref_t<T>;
-    constexpr auto members = std::meta::nonstatic_data_members_of(^^U);
-
-    [&]<std::size_t... Is>(std::index_sequence<Is...>) {
-        (fn(std::string_view{std::meta::identifier_of(members[Is])},
-             obj.[:members[Is]:]),
-            ...);
-    }(std::make_index_sequence<members.size()>{});
+    using U = std::remove_cvref_t<T>;
+    static constexpr auto members = std::define_static_array(
+        std::meta::nonstatic_data_members_of(^^U,
+            std::meta::access_context::unchecked()));
+    template for (constexpr auto member : members) {
+        fn(std::string_view{std::meta::identifier_of(member)},
+           obj.[:member:]);
+    }
 }
 
 #else

@@ -35,6 +35,8 @@ target_link_libraries(db-wrap INTERFACE db-wrap_project_warnings db-wrap_project
 
 if(DB_WRAP_HAS_STD_REFLECTION)
     target_compile_definitions(db-wrap INTERFACE DB_WRAP_HAS_STD_REFLECTION)
+    target_compile_features(db-wrap INTERFACE cxx_std_26)
+    target_compile_options(db-wrap INTERFACE -freflection)
 endif()
 
 # unit tests
